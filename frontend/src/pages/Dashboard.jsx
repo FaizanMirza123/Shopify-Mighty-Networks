@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { Send, X, Check, Users, CreditCard, LogOut, Loader2 } from "lucide-react";
+import {
+  Send,
+  X,
+  Check,
+  Users,
+  CreditCard,
+  LogOut,
+  Loader2,
+} from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useForm } from "react-hook-form";
@@ -50,7 +58,7 @@ const Dashboard = () => {
 
       setPlans(plansResponse.plans);
       setInvites(invitesResponse.invites);
-      
+
       if (plansResponse.plans.length > 0) {
         setSelectedPlan(plansResponse.plans[0]);
       }
@@ -68,10 +76,10 @@ const Dashboard = () => {
 
   const handleInvite = async (data) => {
     if (!selectedPlan) return;
-    
+
     setInviteError("");
     setIsInviting(true);
-    
+
     try {
       const response = await api.sendInvite(
         user.id,
@@ -80,10 +88,10 @@ const Dashboard = () => {
         data.first_name || "",
         data.last_name || ""
       );
-      
+
       // Refresh data
       await fetchData(user.id);
-      
+
       reset();
       setIsInviteOpen(false);
     } catch (err) {
@@ -97,10 +105,10 @@ const Dashboard = () => {
     if (!window.confirm("Are you sure you want to revoke this invite?")) {
       return;
     }
-    
+
     try {
       await api.revokeInvite(user.id, inviteId);
-      
+
       // Refresh data
       await fetchData(user.id);
     } catch (err) {
@@ -132,10 +140,12 @@ const Dashboard = () => {
     );
   }
 
-  const chartData = selectedPlan ? [
-    { name: "Used", value: selectedPlan.used_quantity },
-    { name: "Available", value: selectedPlan.available_quantity },
-  ] : [];
+  const chartData = selectedPlan
+    ? [
+        { name: "Used", value: selectedPlan.used_quantity },
+        { name: "Available", value: selectedPlan.available_quantity },
+      ]
+    : [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -151,7 +161,9 @@ const Dashboard = () => {
               <LogOut className="h-4 w-4" /> Logout
             </button>
             <div className="h-8 w-8 bg-primary rounded-full flex items-center justify-center text-black font-bold">
-              {user?.first_name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
+              {user?.first_name?.[0]?.toUpperCase() ||
+                user?.email?.[0]?.toUpperCase() ||
+                "U"}
             </div>
           </div>
         </div>
@@ -171,44 +183,48 @@ const Dashboard = () => {
             <div className="overflow-hidden" ref={emblaRef}>
               <div className="flex gap-4">
                 {plans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className="flex-[0_0_100%] sm:flex-[0_0_50%] md:flex-[0_0_33%] min-w-0 cursor-pointer"
-                  onClick={() => setSelectedPlan(plan)}
-                >
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    className={cn(
-                      "p-6 rounded-xl shadow-sm border h-full relative overflow-hidden transition-all duration-200",
-                      selectedPlan.id === plan.id
-                        ? "bg-yellow-50 border-primary ring-2 ring-primary ring-offset-2"
-                        : "bg-white border-gray-100 opacity-80 hover:opacity-100"
-                    )}
+                  <div
+                    key={plan.id}
+                    className="flex-[0_0_100%] sm:flex-[0_0_50%] md:flex-[0_0_33%] min-w-0 cursor-pointer"
+                    onClick={() => setSelectedPlan(plan)}
                   >
-                    {selectedPlan.id === plan.id && (
-                      <div className="absolute top-0 right-0 bg-primary text-xs font-bold px-3 py-1 rounded-bl-lg shadow-sm">
-                        SELECTED
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className={cn(
+                        "p-6 rounded-xl shadow-sm border h-full relative overflow-hidden transition-all duration-200",
+                        selectedPlan.id === plan.id
+                          ? "bg-yellow-50 border-primary ring-2 ring-primary ring-offset-2"
+                          : "bg-white border-gray-100 opacity-80 hover:opacity-100"
+                      )}
+                    >
+                      {selectedPlan.id === plan.id && (
+                        <div className="absolute top-0 right-0 bg-primary text-xs font-bold px-3 py-1 rounded-bl-lg shadow-sm">
+                          SELECTED
+                        </div>
+                      )}
+                      <h3 className="font-bold text-lg">
+                        {plan.plan_title || `Plan ${plan.plan_id}`}
+                      </h3>
+                      <p className="text-gray-500 text-sm mb-4">
+                        SKU: {plan.sku}
+                      </p>
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <span className="text-3xl font-bold text-primary">
+                            {plan.available_quantity}
+                          </span>
+                          <span className="text-gray-400 text-sm ml-1">
+                            available
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="block text-sm text-gray-500">
+                            Total: {plan.total_quantity}
+                          </span>
+                        </div>
                       </div>
-                    )}
-                    <h3 className="font-bold text-lg">{plan.plan_title || `Plan ${plan.plan_id}`}</h3>
-                    <p className="text-gray-500 text-sm mb-4">SKU: {plan.sku}</p>
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <span className="text-3xl font-bold text-primary">
-                          {plan.available_quantity}
-                        </span>
-                        <span className="text-gray-400 text-sm ml-1">
-                          available
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="block text-sm text-gray-500">
-                          Total: {plan.total_quantity}
-                        </span>
-                      </div>
-                    </div>
-                  </motion.div>
-                </div>
+                    </motion.div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -280,9 +296,11 @@ const Dashboard = () => {
 
               <Dialog.Root open={isInviteOpen} onOpenChange={setIsInviteOpen}>
                 <Dialog.Trigger asChild>
-                  <button 
+                  <button
                     className="bg-primary text-black px-4 py-2 rounded-md text-sm font-medium hover:bg-yellow-400 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!selectedPlan || selectedPlan.available_quantity <= 0}
+                    disabled={
+                      !selectedPlan || selectedPlan.available_quantity <= 0
+                    }
                   >
                     <Send className="h-4 w-4" /> Invite Member
                   </button>
@@ -315,7 +333,7 @@ const Dashboard = () => {
                         />
                       </fieldset>
                       <div className="mt-[25px] flex justify-end">
-                        <button 
+                        <button
                           type="submit"
                           disabled={isInviting}
                           className="bg-primary text-black hover:bg-yellow-400 inline-flex h-[35px] items-center justify-center rounded-[4px] px-[15px] font-medium leading-none focus:shadow-[0_0_0_2px] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"

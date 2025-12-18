@@ -18,13 +18,13 @@ const Login = () => {
   const onSubmit = async (data) => {
     setError("");
     setIsLoading(true);
-    
+
     try {
       const response = await api.login(data.email, data.password);
-      
+
       // Store user data in localStorage
       localStorage.setItem("user", JSON.stringify(response.user));
-      
+
       // Navigate to dashboard
       navigate("/dashboard");
     } catch (err) {

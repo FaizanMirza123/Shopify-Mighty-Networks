@@ -241,21 +241,23 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
     if available <= 0:
         raise HTTPException(status_code=400, detail="No available invites for this plan")
     
-    # Call Mighty Networks API
+    # Call Mighty Networks API - using query parameters as per documentation
     mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites"
     headers = {
-        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}"
     }
-    mighty_payload = {
-        "recipient_email": recipient_email,
-        "recipient_first_name": recipient_first_name,
-        "recipient_last_name": recipient_last_name
+    params = {
+        "email": recipient_email
     }
+    # Add optional parameters if provided
+    if recipient_first_name:
+        params["first_name"] = recipient_first_name
+    if recipient_last_name:
+        params["last_name"] = recipient_last_name
     
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(mighty_url, headers=headers, json=mighty_payload)
+            response = await client.post(mighty_url, headers=headers, params=params)
             
             if response.status_code not in [200, 201]:
                 try:
@@ -319,10 +321,9 @@ async def revoke_invite(user_id: int, invite_id: int):
         raise HTTPException(status_code=404, detail="Associated plan not found")
     
     # Call Mighty Networks API to revoke
-    mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites/{invite['mighty_invite_id']}/"
+    mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites/{invite['mighty_invite_id']}"
     headers = {
-        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}"
     }
     
     try:
