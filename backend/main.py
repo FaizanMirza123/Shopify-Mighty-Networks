@@ -321,7 +321,9 @@ async def revoke_invite(user_id: int, invite_id: int):
     # Call Mighty Networks API to revoke
     mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites/{invite['mighty_invite_id']}"
     headers = {
-        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}"
+        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0"
     }
     
     try:
