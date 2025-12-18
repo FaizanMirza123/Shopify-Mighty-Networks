@@ -22,6 +22,7 @@ NETWORK_ID = os.getenv("NETWORK_ID")
 SHOPIFY_X_ACCESS_TOKEN = os.getenv("SHOPIFY_X_ACCESS_TOKEN")
 SHOPIFY_STORE_NAME = os.getenv("SHOPIFY_STORE_NAME")
 ZAPIER_WEBHOOK_URL = os.getenv("ZAPIER_WEBHOOK_URL")
+ZAPIER_INVITE_WEBHOOK_URL = os.getenv("ZAPIER_INVITE_WEBHOOK_URL")
 
 # JWT and Security Configuration
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "TEST")
@@ -372,6 +373,18 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request, current
     
     # Increment used quantity
     db.increment_used_quantity(user_plan_id)
+    
+    # Send to Zapier webhook for invite notification
+    zapier_invite_payload = {
+        "email": recipient_email,
+        "plan_name": user_plan["plan_title"]
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(ZAPIER_INVITE_WEBHOOK_URL, json=zapier_invite_payload)
+    except Exception as e:
+        print(f"Failed to send invite notification to Zapier: {e}")
     
     return {
         "status": "success",

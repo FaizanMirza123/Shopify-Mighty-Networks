@@ -131,7 +131,7 @@ const Dashboard = () => {
     const now = new Date();
     const minutesPassed = (now - inviteTime) / (1000 * 60);
     const minutesRemaining = Math.max(0, 60 - minutesPassed);
-    
+
     if (minutesRemaining <= 0) return "Expired";
     if (minutesRemaining < 1) return "< 1 min";
     return `${Math.floor(minutesRemaining)} min`;
@@ -401,7 +401,7 @@ const Dashboard = () => {
                   {invites.map((invite) => {
                     const canRevoke = canRevokeInvite(invite.created_at);
                     const timeRemaining = getTimeRemaining(invite.created_at);
-                    
+
                     return (
                       <tr key={invite.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -445,7 +445,9 @@ const Dashboard = () => {
                               <X className="h-4 w-4" /> Revoke
                             </button>
                           ) : (
-                            <span className="text-gray-400 text-xs">Revoked</span>
+                            <span className="text-gray-400 text-xs">
+                              Revoked
+                            </span>
                           )}
                         </td>
                       </tr>
