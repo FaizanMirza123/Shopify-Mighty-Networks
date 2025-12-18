@@ -242,36 +242,20 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
         raise HTTPException(status_code=400, detail="No available invites for this plan")
     
     # Call Mighty Networks API - only email is required as query parameter
-    # Build URL with query string explicitly
-    mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites?email={recipient_email}"
+    mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites"
     headers = {
-        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}"
+        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0"
     }
-    
-    # DETAILED LOGGING
-    print("\n" + "="*80)
-    print("MIGHTY NETWORKS API REQUEST - INVITE")
-    print("="*80)
-    print(f"METHOD: POST")
-    print(f"FULL URL: {mighty_url}")
-    print(f"HEADERS: {headers}")
-    print("="*80)
+    params = {
+        "email": recipient_email
+    }
+    # Note: first_name and last_name are not request parameters, they appear in the response
     
     try:
         async with httpx.AsyncClient() as client:
-            # POST request with email in URL query string, no body
-            response = await client.post(mighty_url, headers=headers)
-            
-            print("\n" + "="*80)
-            print("MIGHTY NETWORKS API RESPONSE")
-            print("="*80)
-            print(f"STATUS CODE: {response.status_code}")
-            print(f"RESPONSE HEADERS:")
-            for key, value in response.headers.items():
-                print(f"  {key}: {value}")
-            print(f"\nRESPONSE BODY:")
-            print(response.text)
-            print("="*80 + "\n")
+            response = await client.post(mighty_url, headers=headers, params=params)
             
             if response.status_code not in [200, 201]:
                 try:
@@ -282,7 +266,6 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
             
             mighty_response = response.json()
     except httpx.RequestError as e:
-        print(f"\nREQUEST ERROR: {str(e)}\n")
         raise HTTPException(status_code=500, detail=f"Failed to connect to Mighty Networks: {str(e)}")
     
     # Store invite in database
