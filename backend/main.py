@@ -249,11 +249,21 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
     params = {
         "email": recipient_email
     }
-    # Note: first_name and last_name are not request parameters, they appear in the response
+    
+    # Log the request details for debugging
+    print(f"=== MIGHTY NETWORKS API REQUEST ===")
+    print(f"URL: {mighty_url}")
+    print(f"Headers: {headers}")
+    print(f"Params: {params}")
+    print(f"Authorization header length: {len(headers['Authorization'])}")
     
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(mighty_url, headers=headers, params=params)
+            
+            print(f"Response Status: {response.status_code}")
+            print(f"Response Headers: {dict(response.headers)}")
+            print(f"Response Text: {response.text[:500]}")
             
             if response.status_code not in [200, 201]:
                 try:
@@ -381,18 +391,6 @@ async def get_user_invites(user_id: int):
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
-
-
-@app.get("/debug/env")
-async def debug_env():
-    """Debug endpoint to check environment variables."""
-    return {
-        "MIGHTY_NETWORKS_API": f"{MIGHTY_NETWORKS_API[:10]}..." if MIGHTY_NETWORKS_API else "NOT SET",
-        "MIGHTY_NETWORKS_API_length": len(MIGHTY_NETWORKS_API) if MIGHTY_NETWORKS_API else 0,
-        "NETWORK_ID": NETWORK_ID,
-        "ZAPIER_WEBHOOK_URL": ZAPIER_WEBHOOK_URL,
-        "has_quotes_in_api_token": '"' in (MIGHTY_NETWORKS_API or "")
-    }
 
 
 if __name__ == "__main__":
