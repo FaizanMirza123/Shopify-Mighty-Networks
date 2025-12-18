@@ -244,26 +244,16 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
     # Call Mighty Networks API - only email is required as query parameter
     mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites"
     headers = {
-        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}"
+        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
+        "User-Agent": "python-httpx/0.27.0"
     }
     params = {
         "email": recipient_email
     }
     
-    # Log the request details for debugging
-    print(f"=== MIGHTY NETWORKS API REQUEST ===")
-    print(f"URL: {mighty_url}")
-    print(f"Headers: {headers}")
-    print(f"Params: {params}")
-    print(f"Authorization header length: {len(headers['Authorization'])}")
-    
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
             response = await client.post(mighty_url, headers=headers, params=params)
-            
-            print(f"Response Status: {response.status_code}")
-            print(f"Response Headers: {dict(response.headers)}")
-            print(f"Response Text: {response.text[:500]}")
             
             if response.status_code not in [200, 201]:
                 try:
