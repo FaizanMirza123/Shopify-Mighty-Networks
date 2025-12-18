@@ -28,7 +28,7 @@ app = FastAPI(title="Shopify-Mighty Networks Integration")
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://shopify-mighty-networks.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
