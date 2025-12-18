@@ -258,7 +258,10 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
             response = await client.post(mighty_url, headers=headers, json=mighty_payload)
             
             if response.status_code not in [200, 201]:
-                error_detail = response.json().get("error", "Unknown error from Mighty Networks")
+                try:
+                    error_detail = response.json().get("error", "Unknown error from Mighty Networks")
+                except Exception:
+                    error_detail = f"Mighty Networks API error (Status {response.status_code}): {response.text}"
                 raise HTTPException(status_code=response.status_code, detail=error_detail)
             
             mighty_response = response.json()
