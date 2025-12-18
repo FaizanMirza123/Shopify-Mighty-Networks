@@ -242,12 +242,10 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
         raise HTTPException(status_code=400, detail="No available invites for this plan")
     
     # Call Mighty Networks API - only email is required as query parameter
-    mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites"
+    # Build URL with query string explicitly
+    mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites?email={recipient_email}"
     headers = {
         "Authorization": f"Bearer {MIGHTY_NETWORKS_API}"
-    }
-    params = {
-        "email": recipient_email
     }
     
     # DETAILED LOGGING
@@ -255,20 +253,14 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
     print("MIGHTY NETWORKS API REQUEST - INVITE")
     print("="*80)
     print(f"METHOD: POST")
-    print(f"ENDPOINT: {mighty_url}")
-    print(f"HEADERS:")
-    for key, value in headers.items():
-        if key == "Authorization":
-            print(f"  {key}: {value[:20]}...{value[-10:]}")
-        else:
-            print(f"  {key}: {value}")
-    print(f"QUERY PARAMS: {params}")
-    print(f"BODY: None (using query params)")
+    print(f"FULL URL: {mighty_url}")
+    print(f"HEADERS: {headers}")
     print("="*80)
     
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(mighty_url, headers=headers, params=params)
+            # POST request with email in URL query string, no body
+            response = await client.post(mighty_url, headers=headers)
             
             print("\n" + "="*80)
             print("MIGHTY NETWORKS API RESPONSE")
