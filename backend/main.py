@@ -241,7 +241,7 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
     if available <= 0:
         raise HTTPException(status_code=400, detail="No available invites for this plan")
     
-    # Call Mighty Networks API - using query parameters as per documentation
+    # Call Mighty Networks API - only email is required as query parameter
     mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites"
     headers = {
         "Authorization": f"Bearer {MIGHTY_NETWORKS_API}"
@@ -249,11 +249,7 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
     params = {
         "email": recipient_email
     }
-    # Add optional parameters if provided
-    if recipient_first_name:
-        params["first_name"] = recipient_first_name
-    if recipient_last_name:
-        params["last_name"] = recipient_last_name
+    # Note: first_name and last_name are not request parameters, they appear in the response
     
     try:
         async with httpx.AsyncClient() as client:
