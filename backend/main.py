@@ -244,16 +244,42 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
     # Call Mighty Networks API - only email is required as query parameter
     mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites"
     headers = {
-        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
-        "User-Agent": "python-httpx/0.27.0"
+        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}"
     }
     params = {
         "email": recipient_email
     }
     
+    # DETAILED LOGGING
+    print("\n" + "="*80)
+    print("MIGHTY NETWORKS API REQUEST - INVITE")
+    print("="*80)
+    print(f"METHOD: POST")
+    print(f"ENDPOINT: {mighty_url}")
+    print(f"HEADERS:")
+    for key, value in headers.items():
+        if key == "Authorization":
+            print(f"  {key}: {value[:20]}...{value[-10:]}")
+        else:
+            print(f"  {key}: {value}")
+    print(f"QUERY PARAMS: {params}")
+    print(f"BODY: None (using query params)")
+    print("="*80)
+    
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+        async with httpx.AsyncClient() as client:
             response = await client.post(mighty_url, headers=headers, params=params)
+            
+            print("\n" + "="*80)
+            print("MIGHTY NETWORKS API RESPONSE")
+            print("="*80)
+            print(f"STATUS CODE: {response.status_code}")
+            print(f"RESPONSE HEADERS:")
+            for key, value in response.headers.items():
+                print(f"  {key}: {value}")
+            print(f"\nRESPONSE BODY:")
+            print(response.text)
+            print("="*80 + "\n")
             
             if response.status_code not in [200, 201]:
                 try:
@@ -264,6 +290,7 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
             
             mighty_response = response.json()
     except httpx.RequestError as e:
+        print(f"\nREQUEST ERROR: {str(e)}\n")
         raise HTTPException(status_code=500, detail=f"Failed to connect to Mighty Networks: {str(e)}")
     
     # Store invite in database
