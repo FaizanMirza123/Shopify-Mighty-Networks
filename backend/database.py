@@ -108,6 +108,19 @@ def get_user_by_id(user_id):
     return dict(row) if row else None
 
 
+def update_user_password(user_id, hashed_password):
+    """Update user password with a hashed version."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE users 
+        SET password = ?, updated_at = ?
+        WHERE id = ?
+    """, (hashed_password, datetime.utcnow().isoformat(), user_id))
+    conn.commit()
+    conn.close()
+
+
 # User Plans functions
 def add_user_plan(user_id, sku, plan_id, plan_title, quantity, shopify_order_id=None):
     conn = get_connection()

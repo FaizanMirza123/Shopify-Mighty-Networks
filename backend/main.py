@@ -3,9 +3,14 @@ import json
 import string
 import secrets
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Depends
+from datetime import datetime, timedelta
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
+import jwt
+from passlib.context import CryptContext
 
 import database as db
 
@@ -17,6 +22,15 @@ NETWORK_ID = os.getenv("NETWORK_ID")
 SHOPIFY_X_ACCESS_TOKEN = os.getenv("SHOPIFY_X_ACCESS_TOKEN")
 SHOPIFY_STORE_NAME = os.getenv("SHOPIFY_STORE_NAME")
 ZAPIER_WEBHOOK_URL = os.getenv("ZAPIER_WEBHOOK_URL")
+
+# JWT and Security Configuration
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "TEST")
+JWT_ALGORITHM = "HS256"
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
 
 # Load SKU mapping
 SKU_MAPPING_PATH = os.path.join(os.path.dirname(__file__), "sku_mapping.json")
@@ -39,6 +53,65 @@ def generate_password(length=10):
     """Generate a random alphanumeric password."""
     characters = string.ascii_letters + string.digits
     return ''.join(secrets.choice(characters) for _ in range(length))
+
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against its hash."""
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """Create a JWT access token."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode.update({"exp": expire, "iat": datetime.utcnow()})
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return encoded_jwt
+
+
+def decode_access_token(token: str) -> dict:
+    """Decode and verify a JWT access token."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
+
+
+async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+    """Dependency to get the current authenticated user from JWT token."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header required")
+    
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
+    
+    token = authorization.replace("Bearer ", "")
+    payload = decode_access_token(token)
+    
+    user_id = payload.get("sub")
+    email = payload.get("email")
+    
+    if not user_id or not email:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+    
+    # Verify user still exists
+    user = db.get_user_by_id(int(user_id))
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    return user
 
 
 # ============== SHOPIFY WEBHOOK ==============
@@ -165,11 +238,31 @@ async def login(request: Request):
     
     user = db.get_user_by_email(email)
     
-    if not user or user["password"] != password:
+    if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Verify password (support both hashed and plain text for backwards compatibility)
+    password_valid = False
+    if user["password"].startswith("$2b$"):  # bcrypt hash
+        password_valid = verify_password(password, user["password"])
+    else:  # plain text (legacy)
+        password_valid = (user["password"] == password)
+        # If valid, update to hashed password
+        if password_valid:
+            db.update_user_password(user["id"], hash_password(password))
+    
+    if not password_valid:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Create JWT token
+    access_token = create_access_token(
+        data={"sub": str(user["id"]), "email": user["email"]}
+    )
     
     return {
         "status": "success",
+        "access_token": access_token,
+        "token_type": "bearer",
         "user": {
             "id": user["id"],
             "email": user["email"],
@@ -182,11 +275,11 @@ async def login(request: Request):
 # ============== USER PLANS ENDPOINTS ==============
 
 @app.get("/users/{user_id}/plans")
-async def get_user_plans(user_id: int):
+async def get_user_plans(user_id: int, current_user: dict = Depends(get_current_user)):
     """Get all plans for a user with available quantities."""
-    user = db.get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Verify user can only access their own plans
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     
     plans = db.get_user_plans(user_id)
     
@@ -210,10 +303,14 @@ async def get_user_plans(user_id: int):
 # ============== INVITES ENDPOINTS ==============
 
 @app.post("/users/{user_id}/plans/{user_plan_id}/invite")
-async def send_invite(user_id: int, user_plan_id: int, request: Request):
+async def send_invite(user_id: int, user_plan_id: int, request: Request, current_user: dict = Depends(get_current_user)):
     """
     Send an invite to a person for a specific plan via Mighty Networks API.
     """
+    # Verify user can only send invites for their own plans
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     try:
         body = await request.json()
     except Exception:
@@ -225,12 +322,6 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
     
     if not recipient_email:
         raise HTTPException(status_code=400, detail="Recipient email is required")
-    
-    # Verify user exists
-    user = db.get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
     # Verify plan exists and belongs to user
     user_plan = db.get_user_plan_by_id(user_plan_id)
     if not user_plan or user_plan["user_id"] != user_id:
@@ -296,15 +387,14 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request):
 
 
 @app.delete("/users/{user_id}/invites/{invite_id}")
-async def revoke_invite(user_id: int, invite_id: int):
+async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depends(get_current_user)):
     """
     Revoke an invite via Mighty Networks API.
+    Only allowed within 1 hour of sending the invite.
     """
-    # Verify user exists
-    user = db.get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
+    # Verify user can only revoke their own invites
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     # Get invite
     invite = db.get_invite_by_id(invite_id)
     if not invite or invite["user_id"] != user_id:
@@ -312,6 +402,16 @@ async def revoke_invite(user_id: int, invite_id: int):
     
     if invite["status"] == "revoked":
         raise HTTPException(status_code=400, detail="Invite already revoked")
+    
+    # Check if 1 hour has passed since invite was created
+    invite_created_at = datetime.fromisoformat(invite["created_at"])
+    time_elapsed = datetime.utcnow() - invite_created_at
+    
+    if time_elapsed > timedelta(hours=1):
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot revoke invite after 1 hour has passed"
+        )
     
     # Get user plan to get the mighty plan_id
     user_plan = db.get_user_plan_by_id(invite["user_plan_id"])
@@ -352,11 +452,11 @@ async def revoke_invite(user_id: int, invite_id: int):
 
 
 @app.get("/users/{user_id}/invites")
-async def get_user_invites(user_id: int):
+async def get_user_invites(user_id: int, current_user: dict = Depends(get_current_user)):
     """Get all invites sent by a user."""
-    user = db.get_user_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Verify user can only access their own invites
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     
     invites = db.get_invites_by_user(user_id)
     

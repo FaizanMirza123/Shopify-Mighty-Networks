@@ -71,6 +71,7 @@ const Dashboard = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("user");
+    localStorage.removeItem("access_token");
     navigate("/login");
   };
 
@@ -114,6 +115,26 @@ const Dashboard = () => {
     } catch (err) {
       alert(err.message || "Failed to revoke invite");
     }
+  };
+
+  // Helper function to check if invite can be revoked (within 1 hour)
+  const canRevokeInvite = (createdAt) => {
+    const inviteTime = new Date(createdAt);
+    const now = new Date();
+    const hoursPassed = (now - inviteTime) / (1000 * 60 * 60);
+    return hoursPassed <= 1;
+  };
+
+  // Helper function to get time remaining for revocation
+  const getTimeRemaining = (createdAt) => {
+    const inviteTime = new Date(createdAt);
+    const now = new Date();
+    const minutesPassed = (now - inviteTime) / (1000 * 60);
+    const minutesRemaining = Math.max(0, 60 - minutesPassed);
+    
+    if (minutesRemaining <= 0) return "Expired";
+    if (minutesRemaining < 1) return "< 1 min";
+    return `${Math.floor(minutesRemaining)} min`;
   };
 
   if (isLoading) {
@@ -368,50 +389,72 @@ const Dashboard = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Time Left
+                    </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {invites.map((invite) => (
-                    <tr key={invite.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {invite.recipient_email}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {invite.plan_title}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={cn(
-                            "px-2 inline-flex text-xs leading-5 font-semibold rounded-full",
-                            invite.status === "sent"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-100 text-gray-800"
-                          )}
-                        >
-                          {invite.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {invite.status === "sent" ? (
-                          <button
-                            onClick={() => handleRevoke(invite.id)}
-                            className="text-red-600 hover:text-red-900 flex items-center justify-end gap-1 ml-auto"
+                  {invites.map((invite) => {
+                    const canRevoke = canRevokeInvite(invite.created_at);
+                    const timeRemaining = getTimeRemaining(invite.created_at);
+                    
+                    return (
+                      <tr key={invite.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {invite.recipient_email}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {invite.plan_title}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={cn(
+                              "px-2 inline-flex text-xs leading-5 font-semibold rounded-full",
+                              invite.status === "sent"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-100 text-gray-800"
+                            )}
                           >
-                            <X className="h-4 w-4" /> Revoke
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">Revoked</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                            {invite.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {invite.status === "sent" ? timeRemaining : "-"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          {invite.status === "sent" ? (
+                            <button
+                              onClick={() => handleRevoke(invite.id)}
+                              disabled={!canRevoke}
+                              className={cn(
+                                "flex items-center justify-end gap-1 ml-auto",
+                                canRevoke
+                                  ? "text-red-600 hover:text-red-900"
+                                  : "text-gray-400 cursor-not-allowed"
+                              )}
+                              title={
+                                !canRevoke
+                                  ? "Cannot revoke after 1 hour"
+                                  : "Revoke invite"
+                              }
+                            >
+                              <X className="h-4 w-4" /> Revoke
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-xs">Revoked</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {invites.length === 0 && (
                     <tr>
                       <td
-                        colSpan="4"
+                        colSpan="5"
                         className="px-6 py-4 text-center text-sm text-gray-500"
                       >
                         No invites sent yet.

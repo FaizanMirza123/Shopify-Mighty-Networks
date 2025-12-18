@@ -22,8 +22,9 @@ const Login = () => {
     try {
       const response = await api.login(data.email, data.password);
 
-      // Store user data in localStorage
+      // Store user data and JWT token in localStorage
       localStorage.setItem("user", JSON.stringify(response.user));
+      localStorage.setItem("access_token", response.access_token);
 
       // Navigate to dashboard
       navigate("/dashboard");
