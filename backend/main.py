@@ -383,6 +383,18 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/debug/env")
+async def debug_env():
+    """Debug endpoint to check environment variables."""
+    return {
+        "MIGHTY_NETWORKS_API": f"{MIGHTY_NETWORKS_API[:10]}..." if MIGHTY_NETWORKS_API else "NOT SET",
+        "MIGHTY_NETWORKS_API_length": len(MIGHTY_NETWORKS_API) if MIGHTY_NETWORKS_API else 0,
+        "NETWORK_ID": NETWORK_ID,
+        "ZAPIER_WEBHOOK_URL": ZAPIER_WEBHOOK_URL,
+        "has_quotes_in_api_token": '"' in (MIGHTY_NETWORKS_API or "")
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
