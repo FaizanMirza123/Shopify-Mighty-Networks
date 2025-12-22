@@ -417,8 +417,21 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
         raise HTTPException(status_code=400, detail="Invite already revoked")
     
     # Check if 1 hour has passed since invite was created
-    invite_created_at = datetime.fromisoformat(invite["created_at"])
-    time_elapsed = datetime.utcnow() - invite_created_at
+    try:
+        # Parse the timestamp - SQLite returns timestamps without timezone info
+        created_at_str = invite["created_at"].replace(" ", "T") if " " in invite["created_at"] else invite["created_at"]
+        # Remove any timezone suffix and treat as UTC
+        if "+" in created_at_str:
+            created_at_str = created_at_str.split("+")[0]
+        if "Z" in created_at_str:
+            created_at_str = created_at_str.replace("Z", "")
+        
+        invite_created_at = datetime.fromisoformat(created_at_str)
+        time_elapsed = datetime.utcnow() - invite_created_at
+    except (ValueError, AttributeError) as e:
+        print(f"Error parsing timestamp: {invite['created_at']}, error: {e}")
+        # If we can't parse, assume it's recent (allow revocation)
+        time_elapsed = timedelta(seconds=0)
     
     if time_elapsed > timedelta(hours=1):
         raise HTTPException(
@@ -473,6 +486,16 @@ async def get_user_invites(user_id: int, current_user: dict = Depends(get_curren
     
     invites = db.get_invites_by_user(user_id)
     
+    # Helper to normalize timestamp format
+    def normalize_timestamp(ts):
+        if not ts:
+            return ts
+        # Convert SQLite format to ISO format with Z suffix for UTC
+        ts_str = str(ts).replace(" ", "T")
+        if not ts_str.endswith("Z") and "+" not in ts_str:
+            ts_str += "Z"
+        return ts_str
+    
     return {
         "status": "success",
         "invites": [
@@ -485,7 +508,7 @@ async def get_user_invites(user_id: int, current_user: dict = Depends(get_curren
                 "plan_title": inv["plan_title"],
                 "plan_id": inv["mighty_plan_id"],
                 "status": inv["status"],
-                "created_at": inv["created_at"]
+                "created_at": normalize_timestamp(inv["created_at"])
             }
             for inv in invites
         ]
