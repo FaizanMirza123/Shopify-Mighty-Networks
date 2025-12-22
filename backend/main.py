@@ -333,68 +333,45 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request, current
     if available <= 0:
         raise HTTPException(status_code=400, detail="No available invites for this plan")
     
-    # Call Mighty Networks API - only email is required as query parameter
-    mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites"
-    headers = {
-        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0"
-    }
-    params = {
-        "email": recipient_email
-    }
-    # Note: first_name and last_name are not request parameters, they appear in the response
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(mighty_url, headers=headers, params=params)
-            
-            if response.status_code not in [200, 201]:
-                try:
-                    error_detail = response.json().get("error", "Unknown error from Mighty Networks")
-                except Exception:
-                    error_detail = f"Mighty Networks API error (Status {response.status_code}): {response.text}"
-                raise HTTPException(status_code=response.status_code, detail=error_detail)
-            
-            mighty_response = response.json()
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to connect to Mighty Networks: {str(e)}")
-    
-    # Store invite in database
-    invite_id = db.create_invite(
-        user_plan_id=user_plan_id,
-        user_id=user_id,
-        mighty_invite_id=str(mighty_response.get("id", "")),
-        recipient_email=recipient_email,
-        recipient_first_name=mighty_response.get("recipient_first_name", ""),
-        recipient_last_name=mighty_response.get("recipient_last_name", ""),
-        mighty_user_id=mighty_response.get("user_id")
-    )
-    
-    # Increment used quantity
-    db.increment_used_quantity(user_plan_id)
-    
-    # Send to Zapier webhook for invite notification
+    # Send to Zapier webhook to handle invite creation
     zapier_invite_payload = {
         "email": recipient_email,
+        "first_name": recipient_first_name,
+        "last_name": recipient_last_name,
         "plan_name": user_plan["plan_title"]
     }
     
     try:
         async with httpx.AsyncClient() as client:
-            await client.post(ZAPIER_INVITE_WEBHOOK_URL, json=zapier_invite_payload)
-    except Exception as e:
-        print(f"Failed to send invite notification to Zapier: {e}")
+            zapier_response = await client.post(ZAPIER_INVITE_WEBHOOK_URL, json=zapier_invite_payload)
+            if zapier_response.status_code not in [200, 201]:
+                raise HTTPException(status_code=500, detail="Failed to send invite via Zapier")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to Zapier: {str(e)}")
+    
+    # Store invite in database
+    invite_id = db.create_invite(
+        user_plan_id=user_plan_id,
+        user_id=user_id,
+        mighty_invite_id="",  # No mighty invite ID since handled by Zapier
+        recipient_email=recipient_email,
+        recipient_first_name=recipient_first_name,
+        recipient_last_name=recipient_last_name,
+        mighty_user_id=None
+    )
+    
+    # Increment used quantity
+    db.increment_used_quantity(user_plan_id)
     
     return {
         "status": "success",
         "invite": {
             "id": invite_id,
-            "mighty_invite_id": mighty_response.get("id"),
             "recipient_email": recipient_email,
-            "recipient_first_name": mighty_response.get("recipient_first_name"),
-            "recipient_last_name": mighty_response.get("recipient_last_name"),
-            "created_at": mighty_response.get("created_at")
+            "recipient_first_name": recipient_first_name,
+            "recipient_last_name": recipient_last_name,
+            "plan_name": user_plan["plan_title"],
+            "created_at": datetime.utcnow().isoformat() + "Z"
         }
     }
 
@@ -439,33 +416,7 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
             detail="Cannot revoke invite after 1 hour has passed"
         )
     
-    # Get user plan to get the mighty plan_id
-    user_plan = db.get_user_plan_by_id(invite["user_plan_id"])
-    if not user_plan:
-        raise HTTPException(status_code=404, detail="Associated plan not found")
-    
-    # Call Mighty Networks API to revoke
-    mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites/{invite['mighty_invite_id']}"
-    headers = {
-        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0"
-    }
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.delete(mighty_url, headers=headers)
-            
-            if response.status_code not in [200, 204]:
-                try:
-                    error_detail = response.json().get("error", "Unknown error from Mighty Networks")
-                except Exception:
-                    error_detail = "Failed to revoke invite"
-                raise HTTPException(status_code=response.status_code, detail=error_detail)
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to connect to Mighty Networks: {str(e)}")
-    
-    # Update invite status in database
+    # Update invite status in database (no Mighty Networks API call needed since Zapier handles it)
     db.revoke_invite(invite_id)
     
     # Decrement used quantity
