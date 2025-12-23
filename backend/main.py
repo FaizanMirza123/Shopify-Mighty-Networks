@@ -38,7 +38,9 @@ SKU_MAPPING_PATH = os.path.join(os.path.dirname(__file__), "sku_mapping.json")
 with open(SKU_MAPPING_PATH, "r") as f:
     SKU_TO_PLAN_MAPPING = json.load(f)
 
-app = FastAPI(title="Shopify-Mighty Networks Integration")
+app = FastAPI(title="Shopify-Mighty Networks Integration",docs_url=None,
+    redoc_url=None,
+    openapi_url=None)
 
 # CORS middleware for frontend
 app.add_middleware(
