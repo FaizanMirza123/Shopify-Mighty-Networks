@@ -9,7 +9,6 @@ import {
   CreditCard,
   LogOut,
   Loader2,
-  Trash2,
 } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -33,7 +32,6 @@ const Dashboard = () => {
   const [error, setError] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [isInviting, setIsInviting] = useState(false);
-  const [revokingInviteId, setRevokingInviteId] = useState(null);
 
   useEffect(() => {
     // Get user from localStorage
@@ -102,38 +100,6 @@ const Dashboard = () => {
     } finally {
       setIsInviting(false);
     }
-  };
-
-  const handleRevokeInvite = async (inviteId) => {
-    if (
-      !confirm(
-        "Are you sure you want to revoke this invite? This action cannot be undone."
-      )
-    ) {
-      return;
-    }
-
-    setRevokingInviteId(inviteId);
-
-    try {
-      await api.revokeInvite(user.id, inviteId);
-      // Refresh data
-      await fetchData(user.id);
-    } catch (err) {
-      alert(err.message || "Failed to revoke invite");
-    } finally {
-      setRevokingInviteId(null);
-    }
-  };
-
-  const canRevokeInvite = (invite) => {
-    if (invite.status !== "sent") return false;
-
-    const createdAt = new Date(invite.created_at);
-    const now = new Date();
-    const hoursSinceCreated = (now - createdAt) / (1000 * 60 * 60);
-
-    return hoursSinceCreated < 1;
   };
 
   if (isLoading) {
@@ -388,9 +354,6 @@ const Dashboard = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -407,8 +370,6 @@ const Dashboard = () => {
                           className={cn(
                             "px-2 inline-flex text-xs leading-5 font-semibold rounded-full",
                             invite.status === "sent"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : invite.status === "joined"
                               ? "bg-green-100 text-green-800"
                               : "bg-gray-100 text-gray-800"
                           )}
@@ -416,39 +377,12 @@ const Dashboard = () => {
                           {invite.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {canRevokeInvite(invite) ? (
-                          <button
-                            onClick={() => handleRevokeInvite(invite.id)}
-                            disabled={revokingInviteId === invite.id}
-                            className="text-red-600 hover:text-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                            title="Revoke invite (within 1 hour)"
-                          >
-                            {revokingInviteId === invite.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <>
-                                <Trash2 className="h-4 w-4" />
-                                <span className="text-xs">Revoke</span>
-                              </>
-                            )}
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">
-                            {invite.status === "revoked"
-                              ? "Revoked"
-                              : invite.status === "joined"
-                              ? "Joined"
-                              : "Cannot revoke"}
-                          </span>
-                        )}
-                      </td>
                     </tr>
                   ))}
                   {invites.length === 0 && (
                     <tr>
                       <td
-                        colSpan="4"
+                        colSpan="3"
                         className="px-6 py-4 text-center text-sm text-gray-500"
                       >
                         No invites sent yet.

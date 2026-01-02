@@ -263,35 +263,5 @@ def revoke_invite(invite_id):
     conn.close()
 
 
-def mark_invite_joined(recipient_email, mighty_user_id):
-    """Mark an invite as joined when the member joins Mighty Networks."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE invites 
-        SET status = 'joined', mighty_user_id = ?, updated_at = ?
-        WHERE recipient_email = ? AND status = 'sent'
-    """, (mighty_user_id, datetime.utcnow().isoformat(), recipient_email))
-    rows_updated = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return rows_updated
-
-
-def get_invite_by_email(recipient_email):
-    """Get the most recent sent invite by recipient email."""
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM invites 
-        WHERE recipient_email = ? AND status = 'sent'
-        ORDER BY created_at DESC
-        LIMIT 1
-    """, (recipient_email,))
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
 # Initialize database on import
 init_db()
