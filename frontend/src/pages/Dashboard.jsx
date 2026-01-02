@@ -105,7 +105,11 @@ const Dashboard = () => {
   };
 
   const handleRevokeInvite = async (inviteId) => {
-    if (!confirm("Are you sure you want to revoke this invite? This action cannot be undone.")) {
+    if (
+      !confirm(
+        "Are you sure you want to revoke this invite? This action cannot be undone."
+      )
+    ) {
       return;
     }
 
@@ -124,11 +128,11 @@ const Dashboard = () => {
 
   const canRevokeInvite = (invite) => {
     if (invite.status !== "sent") return false;
-    
+
     const createdAt = new Date(invite.created_at);
     const now = new Date();
     const hoursSinceCreated = (now - createdAt) / (1000 * 60 * 60);
-    
+
     return hoursSinceCreated < 1;
   };
 
@@ -403,6 +407,8 @@ const Dashboard = () => {
                           className={cn(
                             "px-2 inline-flex text-xs leading-5 font-semibold rounded-full",
                             invite.status === "sent"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : invite.status === "joined"
                               ? "bg-green-100 text-green-800"
                               : "bg-gray-100 text-gray-800"
                           )}
@@ -429,7 +435,11 @@ const Dashboard = () => {
                           </button>
                         ) : (
                           <span className="text-gray-400 text-xs">
-                            {invite.status === "revoked" ? "Revoked" : "Cannot revoke"}
+                            {invite.status === "revoked"
+                              ? "Revoked"
+                              : invite.status === "joined"
+                              ? "Joined"
+                              : "Cannot revoke"}
                           </span>
                         )}
                       </td>

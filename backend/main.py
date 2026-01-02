@@ -223,6 +223,54 @@ async def shopify_order_paid_webhook(request: Request):
     }
 
 
+# ============== MIGHTY NETWORKS WEBHOOK ==============
+
+@app.post("/webhook/mighty/member-joined")
+async def mighty_member_joined_webhook(request: Request):
+    """
+    Webhook endpoint for Mighty Networks MemberJoined events.
+    Updates invite status to 'joined' when an invited member joins.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    
+    # Extract member info from webhook payload
+    # The exact structure depends on Mighty Networks webhook format
+    # Common fields: email, user_id, space_id, etc.
+    email = payload.get("email")
+    mighty_user_id = payload.get("user_id") or payload.get("id")
+    
+    if not email:
+        return {"status": "skipped", "reason": "No email found in webhook payload"}
+    
+    # Check if there's a pending invite for this email
+    invite = db.get_invite_by_email(email)
+    
+    if not invite:
+        return {
+            "status": "skipped", 
+            "reason": f"No pending invite found for {email}"
+        }
+    
+    # Update invite status to 'joined'
+    rows_updated = db.mark_invite_joined(email, mighty_user_id)
+    
+    if rows_updated > 0:
+        return {
+            "status": "success",
+            "message": f"Invite status updated to 'joined' for {email}",
+            "invite_id": invite["id"],
+            "mighty_user_id": mighty_user_id
+        }
+    else:
+        return {
+            "status": "skipped",
+            "reason": f"No pending invites updated for {email}"
+        }
+
+
 # ============== AUTH ENDPOINTS ==============
 
 @app.post("/auth/login")
