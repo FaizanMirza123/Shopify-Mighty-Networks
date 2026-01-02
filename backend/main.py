@@ -430,7 +430,43 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
             detail="Cannot revoke invite after 1 hour has passed"
         )
     
-    # Update invite status in database (no Mighty Networks API call needed since Zapier handles it)
+    # Get the user plan to retrieve the plan_id
+    user_plan = db.get_user_plan_by_id(invite["user_plan_id"])
+    if not user_plan:
+        raise HTTPException(status_code=404, detail="Associated plan not found")
+    
+    # Call Mighty Networks API to revoke the invite
+    mighty_invite_id = invite.get("mighty_invite_id")
+    if not mighty_invite_id:
+        raise HTTPException(status_code=400, detail="No Mighty Networks invite ID found")
+    
+    mighty_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites/{mighty_invite_id}/"
+    headers = {
+        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
+        "User-Agent": "Mozilla/5.0"
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.delete(mighty_url, headers=headers)
+            
+            if response.status_code == 204:
+                # Successfully revoked
+                pass
+            elif response.status_code == 404:
+                raise HTTPException(status_code=404, detail="Invite not found in Mighty Networks")
+            elif response.status_code == 409:
+                raise HTTPException(status_code=409, detail="Invite has already been accepted and cannot be revoked")
+            else:
+                try:
+                    error_detail = response.json().get("error", "Unknown error from Mighty Networks")
+                except Exception:
+                    error_detail = f"Mighty Networks API error (Status {response.status_code}): {response.text}"
+                raise HTTPException(status_code=response.status_code, detail=error_detail)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to Mighty Networks: {str(e)}")
+    
+    # Update invite status in database
     db.revoke_invite(invite_id)
     
     # Decrement used quantity
