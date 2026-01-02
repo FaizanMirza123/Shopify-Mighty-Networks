@@ -45,7 +45,7 @@ app = FastAPI(title="Shopify-Mighty Networks Integration",docs_url=None,
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://shopify-mighty-networks.vercel.app","https://workflow.parelli.com"],
+    allow_origins=["http://localhost:5173","https://shopify-mighty-networks.vercel.app","https://workflow.parelli.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -335,31 +335,39 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request, current
     if available <= 0:
         raise HTTPException(status_code=400, detail="No available invites for this plan")
     
-    # Send to Zapier webhook to handle invite creation
-    zapier_invite_payload = {
-        "email": recipient_email,
-        "first_name": recipient_first_name,
-        "last_name": recipient_last_name,
-        "plan_name": user_plan["plan_title"]
+    # Call Mighty Networks API to create invite
+    mighty_api_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{user_plan['plan_id']}/invites"
+    mighty_headers = {
+        "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
+        "Content-Type": "application/json"
+    }
+    mighty_payload = {
+        "recipient_email": recipient_email,
+        "recipient_first_name": recipient_first_name,
+        "recipient_last_name": recipient_last_name
     }
     
     try:
         async with httpx.AsyncClient() as client:
-            zapier_response = await client.post(ZAPIER_INVITE_WEBHOOK_URL, json=zapier_invite_payload)
-            if zapier_response.status_code not in [200, 201]:
-                raise HTTPException(status_code=500, detail="Failed to send invite via Zapier")
+            mighty_response = await client.post(mighty_api_url, json=mighty_payload, headers=mighty_headers)
+            if mighty_response.status_code not in [200, 201]:
+                raise HTTPException(
+                    status_code=500, 
+                    detail=f"Failed to create invite via Mighty Networks API: {mighty_response.text}"
+                )
+            mighty_data = mighty_response.json()
     except httpx.RequestError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to connect to Zapier: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to connect to Mighty Networks: {str(e)}")
     
-    # Store invite in database
+    # Store invite in database with Mighty Networks response data
     invite_id = db.create_invite(
         user_plan_id=user_plan_id,
         user_id=user_id,
-        mighty_invite_id="",  # No mighty invite ID since handled by Zapier
+        mighty_invite_id=str(mighty_data.get("id", "")),
         recipient_email=recipient_email,
         recipient_first_name=recipient_first_name,
         recipient_last_name=recipient_last_name,
-        mighty_user_id=None
+        mighty_user_id=mighty_data.get("user_id")
     )
     
     # Increment used quantity
@@ -369,11 +377,12 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request, current
         "status": "success",
         "invite": {
             "id": invite_id,
+            "mighty_invite_id": mighty_data.get("id"),
             "recipient_email": recipient_email,
             "recipient_first_name": recipient_first_name,
             "recipient_last_name": recipient_last_name,
             "plan_name": user_plan["plan_title"],
-            "created_at": datetime.utcnow().isoformat() + "Z"
+            "created_at": mighty_data.get("created_at", datetime.utcnow().isoformat() + "Z")
         }
     }
 
