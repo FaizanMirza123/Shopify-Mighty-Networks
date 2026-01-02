@@ -72,4 +72,13 @@ export const api = {
     
     return handleResponse(response);
   },
+
+  revokeInvite: async (userId, inviteId) => {
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/invites/${inviteId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    
+    return handleResponse(response);
+  },
 };
