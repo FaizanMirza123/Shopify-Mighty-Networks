@@ -241,16 +241,16 @@ async def mighty_networks_webhook(request: Request):
         print(f"[MIGHTY WEBHOOK ERROR] Failed to parse JSON: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
     
-    event_type = payload.get("event")
+    event_type = payload.get("event_type")
     print(f"[MIGHTY WEBHOOK] Event type: {event_type}")
     
     # Only handle badge events
-    if event_type not in ["MemberBadgeAdded", "MemberBadgeRemoved"]:
+    if event_type not in ["MemberBadgeAddedHook", "MemberBadgeRemovedHook"]:
         print(f"[MIGHTY WEBHOOK] Skipping - event type not handled")
         return {"status": "skipped", "reason": f"Event type {event_type} not handled"}
     
     # Extract member and badge information
-    data = payload.get("data", {})
+    data = payload.get("payload", {})
     member = data.get("member", {})
     badge = data.get("badge", {})
     
@@ -258,7 +258,7 @@ async def mighty_networks_webhook(request: Request):
     print(f"[MIGHTY WEBHOOK] Badge data: {json.dumps(badge, indent=2)}")
     
     member_email = member.get("email")
-    badge_name = badge.get("name")
+    badge_name = badge.get("title")
     
     print(f"[MIGHTY WEBHOOK] Extracted - Email: {member_email}, Badge: {badge_name}")
     
@@ -295,7 +295,7 @@ async def mighty_networks_webhook(request: Request):
     print(f"[MIGHTY WEBHOOK] Found invite: ID={invite['id']}, Status={invite['status']}")
     
     # Update invite status based on event type
-    if event_type == "MemberBadgeAdded":
+    if event_type == "MemberBadgeAddedHook":
         print(f"[MIGHTY WEBHOOK] Updating invite {invite['id']} status to 'joined'")
         db.update_invite_status(invite["id"], "joined")
         print(f"[MIGHTY WEBHOOK] Successfully updated invite status to 'joined'")
@@ -305,7 +305,7 @@ async def mighty_networks_webhook(request: Request):
             "invite_id": invite["id"],
             "badge_name": badge_name
         }
-    elif event_type == "MemberBadgeRemoved":
+    elif event_type == "MemberBadgeRemovedHook":
         print(f"[MIGHTY WEBHOOK] Updating invite {invite['id']} status to 'removed'")
         db.update_invite_status(invite["id"], "removed")
         print(f"[MIGHTY WEBHOOK] Successfully updated invite status to 'removed'")
