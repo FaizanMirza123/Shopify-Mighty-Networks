@@ -9,7 +9,6 @@ import {
   CreditCard,
   LogOut,
   Loader2,
-  XCircle,
 } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -33,7 +32,6 @@ const Dashboard = () => {
   const [error, setError] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [isInviting, setIsInviting] = useState(false);
-  const [revokingInviteId, setRevokingInviteId] = useState(null);
 
   useEffect(() => {
     // Get user from localStorage
@@ -101,24 +99,6 @@ const Dashboard = () => {
       setInviteError(err.message || "Failed to send invite");
     } finally {
       setIsInviting(false);
-    }
-  };
-
-  const handleRevokeInvite = async (inviteId) => {
-    if (!window.confirm("Are you sure you want to revoke this invite? This can only be done within 1 hour of sending.")) {
-      return;
-    }
-
-    setRevokingInviteId(inviteId);
-
-    try {
-      await api.revokeInvite(user.id, inviteId);
-      // Refresh data
-      await fetchData(user.id);
-    } catch (err) {
-      alert(err.message || "Failed to revoke invite");
-    } finally {
-      setRevokingInviteId(null);
     }
   };
 
@@ -374,9 +354,6 @@ const Dashboard = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -404,28 +381,12 @@ const Dashboard = () => {
                           {invite.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {invite.status === "sent" && (
-                          <button
-                            onClick={() => handleRevokeInvite(invite.id)}
-                            disabled={revokingInviteId === invite.id}
-                            className="text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                          >
-                            {revokingInviteId === invite.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <XCircle className="h-4 w-4" />
-                            )}
-                            Revoke
-                          </button>
-                        )}
-                      </td>
                     </tr>
                   ))}
                   {invites.length === 0 && (
                     <tr>
                       <td
-                        colSpan="4"
+                        colSpan="3"
                         className="px-6 py-4 text-center text-sm text-gray-500"
                       >
                         No invites sent yet.
