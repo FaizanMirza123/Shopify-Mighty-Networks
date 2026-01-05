@@ -291,5 +291,21 @@ def get_invite_by_email(recipient_email):
     return dict(row) if row else None
 
 
+def get_invite_by_email_and_plan(recipient_email, plan_id):
+    """Get the most recent invite by recipient email and plan_id."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT i.* FROM invites i
+        JOIN user_plans up ON i.user_plan_id = up.id
+        WHERE i.recipient_email = ? AND up.plan_id = ?
+        ORDER BY i.created_at DESC 
+        LIMIT 1
+    """, (recipient_email, plan_id))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 # Initialize database on import
 init_db()

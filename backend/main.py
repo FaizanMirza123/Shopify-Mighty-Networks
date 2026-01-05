@@ -38,6 +38,14 @@ SKU_MAPPING_PATH = os.path.join(os.path.dirname(__file__), "sku_mapping.json")
 with open(SKU_MAPPING_PATH, "r") as f:
     SKU_TO_PLAN_MAPPING = json.load(f)
 
+# Badge to Plan ID mapping for Parelli Programs
+BADGE_TO_PLAN_ID = {
+    "Level 1 Parelli Program": "243479",
+    "Level 2 Parelli Program": "242949",
+    "Level 3 Parelli Program": "TBD",  # Update when Level 3 plan ID is known
+    "Level 4 Parelli Program": "TBD"   # Update when Level 4 plan ID is known
+}
+
 app = FastAPI(title="Shopify-Mighty Networks Integration",docs_url=None,
     redoc_url=None,
     openapi_url=None)
@@ -284,9 +292,17 @@ async def mighty_networks_webhook(request: Request):
         print(f"[MIGHTY WEBHOOK] Tracked badges: {parelli_badges}")
         return {"status": "skipped", "reason": f"Badge {badge_name} is not a tracked Parelli Program badge"}
     
-    # Find the invite by recipient email
-    print(f"[MIGHTY WEBHOOK] Searching for invite with email: {member_email}")
-    invite = db.get_invite_by_email(member_email)
+    # Get the corresponding plan ID for this badge
+    plan_id = BADGE_TO_PLAN_ID.get(badge_name)
+    if not plan_id or plan_id == "TBD":
+        print(f"[MIGHTY WEBHOOK] Skipping - no plan ID mapped for badge '{badge_name}'")
+        return {"status": "skipped", "reason": f"No plan ID configured for badge {badge_name}"}
+    
+    print(f"[MIGHTY WEBHOOK] Badge '{badge_name}' mapped to plan_id: {plan_id}")
+    
+    # Find the invite by recipient email and plan_id
+    print(f"[MIGHTY WEBHOOK] Searching for invite with email: {member_email} and plan_id: {plan_id}")
+    invite = db.get_invite_by_email_and_plan(member_email, plan_id)
     
     if not invite:
         print(f"[MIGHTY WEBHOOK] No invite found for email: {member_email}")
