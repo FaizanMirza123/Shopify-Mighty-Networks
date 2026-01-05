@@ -551,7 +551,14 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
             
             # Get all invites for this plan
             url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{mighty_plan_id}/invites"
+            print(f"[REVOKE] Request URL: {url}")
+            print(f"[REVOKE] NETWORK_ID: {NETWORK_ID}")
+            print(f"[REVOKE] API Token present: {bool(MIGHTY_NETWORKS_API)}")
+            
             response = await client.get(url, headers=headers)
+            
+            print(f"[REVOKE] Response status: {response.status_code}")
+            print(f"[REVOKE] Response body: {response.text}")
             
             if response.status_code != 200:
                 print(f"[REVOKE] Failed to fetch invites from Mighty Networks: {response.status_code}")
