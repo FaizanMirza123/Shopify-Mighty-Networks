@@ -531,7 +531,62 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
             detail="Cannot revoke invite after 1 hour has passed"
         )
     
-    # Update invite status in database (no Mighty Networks API call needed since Zapier handles it)
+    # Get the user_plan to retrieve the Mighty Networks plan_id
+    user_plan = db.get_user_plan_by_id(invite["user_plan_id"])
+    if not user_plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    mighty_plan_id = user_plan["plan_id"]
+    recipient_email = invite["recipient_email"]
+    
+    print(f"[REVOKE] Fetching invites for plan_id: {mighty_plan_id}, email: {recipient_email}")
+    
+    # Fetch invites from Mighty Networks for this plan
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {
+                "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
+                "Content-Type": "application/json"
+            }
+            
+            # Get all invites for this plan
+            url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{mighty_plan_id}/invites"
+            response = await client.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                print(f"[REVOKE] Failed to fetch invites from Mighty Networks: {response.status_code}")
+                raise HTTPException(status_code=500, detail="Failed to fetch invites from Mighty Networks")
+            
+            invites_data = response.json()
+            mighty_invites = invites_data.get("items", [])
+            
+            # Find the invite matching this email
+            mighty_invite_id = None
+            for mn_invite in mighty_invites:
+                if mn_invite.get("recipient_email") == recipient_email:
+                    mighty_invite_id = mn_invite.get("id")
+                    print(f"[REVOKE] Found Mighty Networks invite_id: {mighty_invite_id} for email: {recipient_email}")
+                    break
+            
+            if not mighty_invite_id:
+                print(f"[REVOKE] No Mighty Networks invite found for email: {recipient_email}")
+                raise HTTPException(status_code=404, detail="Invite not found in Mighty Networks")
+            
+            # Revoke the invite via Mighty Networks API
+            revoke_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/invites/{mighty_invite_id}"
+            revoke_response = await client.delete(revoke_url, headers=headers)
+            
+            if revoke_response.status_code not in [200, 204]:
+                print(f"[REVOKE] Failed to revoke invite in Mighty Networks: {revoke_response.status_code}")
+                raise HTTPException(status_code=500, detail="Failed to revoke invite in Mighty Networks")
+            
+            print(f"[REVOKE] Successfully revoked invite in Mighty Networks")
+    
+    except httpx.RequestError as e:
+        print(f"[REVOKE] Network error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to connect to Mighty Networks: {str(e)}")
+    
+    # Update invite status in database
     db.revoke_invite(invite_id)
     
     # Decrement used quantity
