@@ -556,32 +556,53 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
             print(f"[REVOKE] NETWORK_ID: {NETWORK_ID}")
             print(f"[REVOKE] API Token present: {bool(MIGHTY_NETWORKS_API)}")
             
-            response = await client.get(url, headers=headers)
-            
-            print(f"[REVOKE] Response status: {response.status_code}")
-            print(f"[REVOKE] Response body: {response.text}")
-            
-            if response.status_code != 200:
-                print(f"[REVOKE] Failed to fetch invites from Mighty Networks: {response.status_code}")
-                raise HTTPException(status_code=500, detail="Failed to fetch invites from Mighty Networks")
-            
-            invites_data = response.json()
-            mighty_invites = invites_data.get("items", [])
-            
-            print(f"[REVOKE] Found {len(mighty_invites)} total invites for this plan")
-            print(f"[REVOKE] Searching for exact match: '{recipient_email}'")
-            
-            # Log all emails found
-            for idx, mn_invite in enumerate(mighty_invites):
-                print(f"[REVOKE] Invite {idx+1}: email='{mn_invite.get('recipient_email')}', id={mn_invite.get('id')}")
-            
-            # Find the invite matching this email
             mighty_invite_id = None
-            for mn_invite in mighty_invites:
-                if mn_invite.get("recipient_email") == recipient_email:
-                    mighty_invite_id = mn_invite.get("id")
-                    print(f"[REVOKE] Found Mighty Networks invite_id: {mighty_invite_id} for email: {recipient_email}")
+            page = 1
+            
+            # Paginate through all invites until we find the matching email
+            while url:
+                print(f"[REVOKE] Fetching page {page}...")
+                response = await client.get(url, headers=headers)
+                
+                print(f"[REVOKE] Response status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    print(f"[REVOKE] Failed to fetch invites from Mighty Networks: {response.status_code}")
+                    print(f"[REVOKE] Response body: {response.text}")
+                    raise HTTPException(status_code=500, detail="Failed to fetch invites from Mighty Networks")
+                
+                invites_data = response.json()
+                mighty_invites = invites_data.get("items", [])
+                
+                print(f"[REVOKE] Found {len(mighty_invites)} invites on page {page}")
+                print(f"[REVOKE] Searching for exact match: '{recipient_email}'")
+                
+                # Search for the invite matching this email
+                for idx, mn_invite in enumerate(mighty_invites):
+                    invite_email = mn_invite.get("recipient_email")
+                    print(f"[REVOKE] Page {page}, Invite {idx+1}: email='{invite_email}', id={mn_invite.get('id')}")
+                    
+                    if invite_email == recipient_email:
+                        mighty_invite_id = mn_invite.get("id")
+                        print(f"[REVOKE] ✓ Found Mighty Networks invite_id: {mighty_invite_id} for email: {recipient_email}")
+                        break
+                
+                # If found, stop pagination
+                if mighty_invite_id:
                     break
+                
+                # Check if there's a next page
+                links = invites_data.get("links", {})
+                next_url = links.get("next")
+                
+                if next_url:
+                    # Construct full URL from relative path
+                    url = f"https://api.mn.co{next_url}"
+                    page += 1
+                    print(f"[REVOKE] Moving to next page: {url}")
+                else:
+                    print(f"[REVOKE] No more pages to check")
+                    url = None
             
             if not mighty_invite_id:
                 print(f"[REVOKE] No Mighty Networks invite found for email: {recipient_email}")
