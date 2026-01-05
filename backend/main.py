@@ -568,6 +568,13 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
             invites_data = response.json()
             mighty_invites = invites_data.get("items", [])
             
+            print(f"[REVOKE] Found {len(mighty_invites)} total invites for this plan")
+            print(f"[REVOKE] Searching for exact match: '{recipient_email}'")
+            
+            # Log all emails found
+            for idx, mn_invite in enumerate(mighty_invites):
+                print(f"[REVOKE] Invite {idx+1}: email='{mn_invite.get('recipient_email')}', id={mn_invite.get('id')}")
+            
             # Find the invite matching this email
             mighty_invite_id = None
             for mn_invite in mighty_invites:
