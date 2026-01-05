@@ -233,13 +233,20 @@ async def mighty_networks_webhook(request: Request):
     """
     try:
         payload = await request.json()
-    except Exception:
+        print(f"\n{'='*60}")
+        print(f"[MIGHTY WEBHOOK] Received payload:")
+        print(json.dumps(payload, indent=2))
+        print(f"{'='*60}\n")
+    except Exception as e:
+        print(f"[MIGHTY WEBHOOK ERROR] Failed to parse JSON: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
     
     event_type = payload.get("event")
+    print(f"[MIGHTY WEBHOOK] Event type: {event_type}")
     
     # Only handle badge events
     if event_type not in ["MemberBadgeAdded", "MemberBadgeRemoved"]:
+        print(f"[MIGHTY WEBHOOK] Skipping - event type not handled")
         return {"status": "skipped", "reason": f"Event type {event_type} not handled"}
     
     # Extract member and badge information
@@ -247,14 +254,21 @@ async def mighty_networks_webhook(request: Request):
     member = data.get("member", {})
     badge = data.get("badge", {})
     
+    print(f"[MIGHTY WEBHOOK] Member data: {json.dumps(member, indent=2)}")
+    print(f"[MIGHTY WEBHOOK] Badge data: {json.dumps(badge, indent=2)}")
+    
     member_email = member.get("email")
     badge_name = badge.get("name")
     
+    print(f"[MIGHTY WEBHOOK] Extracted - Email: {member_email}, Badge: {badge_name}")
+    
     # Validate required fields
     if not member_email:
+        print(f"[MIGHTY WEBHOOK] Skipping - no member email found")
         return {"status": "skipped", "reason": "No member email found"}
     
     if not badge_name:
+        print(f"[MIGHTY WEBHOOK] Skipping - no badge name found")
         return {"status": "skipped", "reason": "No badge name found"}
     
     # Check if badge is one of the Parelli Program badges
@@ -266,17 +280,25 @@ async def mighty_networks_webhook(request: Request):
     ]
     
     if badge_name not in parelli_badges:
+        print(f"[MIGHTY WEBHOOK] Skipping - badge '{badge_name}' not in tracked badges")
+        print(f"[MIGHTY WEBHOOK] Tracked badges: {parelli_badges}")
         return {"status": "skipped", "reason": f"Badge {badge_name} is not a tracked Parelli Program badge"}
     
     # Find the invite by recipient email
+    print(f"[MIGHTY WEBHOOK] Searching for invite with email: {member_email}")
     invite = db.get_invite_by_email(member_email)
     
     if not invite:
+        print(f"[MIGHTY WEBHOOK] No invite found for email: {member_email}")
         return {"status": "skipped", "reason": f"No invite found for email {member_email}"}
+    
+    print(f"[MIGHTY WEBHOOK] Found invite: ID={invite['id']}, Status={invite['status']}")
     
     # Update invite status based on event type
     if event_type == "MemberBadgeAdded":
+        print(f"[MIGHTY WEBHOOK] Updating invite {invite['id']} status to 'joined'")
         db.update_invite_status(invite["id"], "joined")
+        print(f"[MIGHTY WEBHOOK] Successfully updated invite status to 'joined'")
         return {
             "status": "success",
             "message": f"Invite status updated to 'joined' for {member_email}",
@@ -284,7 +306,9 @@ async def mighty_networks_webhook(request: Request):
             "badge_name": badge_name
         }
     elif event_type == "MemberBadgeRemoved":
+        print(f"[MIGHTY WEBHOOK] Updating invite {invite['id']} status to 'removed'")
         db.update_invite_status(invite["id"], "removed")
+        print(f"[MIGHTY WEBHOOK] Successfully updated invite status to 'removed'")
         return {
             "status": "success",
             "message": f"Invite status updated to 'removed' for {member_email}",
@@ -292,6 +316,7 @@ async def mighty_networks_webhook(request: Request):
             "badge_name": badge_name
         }
     
+    print(f"[MIGHTY WEBHOOK] Unknown processing result - should not reach here")
     return {"status": "skipped", "reason": "Unknown event processing result"}
 
 
