@@ -608,14 +608,8 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
         "status": "success",
         "message": "Invite revoked successfully"
     }
-if not mighty_invite_id:
-                print(f"[REVOKE] No invite ID in response")
-                raise HTTPException(status_code=404, detail="Invite not found in Mighty Networks")
-            
-            # Step 3: Revoke the invite via Mighty Networks API
-            revoke_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/invites/{mighty_invite_id}"
-            print(f"[REVOKE] Revoking invite at: {revoke_url}")
-            
+
+
 @app.get("/users/{user_id}/invites")
 async def get_user_invites(user_id: int, current_user: dict = Depends(get_current_user)):
     """Get all invites sent by a user."""
