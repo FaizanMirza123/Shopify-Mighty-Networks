@@ -539,9 +539,9 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
     mighty_plan_id = user_plan["plan_id"]
     recipient_email = invite["recipient_email"]
     
-    print(f"[REVOKE] Fetching invites for plan_id: {mighty_plan_id}, email: {recipient_email}")
+    print(f"[REVOKE] Attempting to revoke invite for plan_id: {mighty_plan_id}, email: {recipient_email}")
     
-    # Fetch invites from Mighty Networks for this plan
+    # Get member by email first, then get their invite
     try:
         async with httpx.AsyncClient() as client:
             headers = {
@@ -550,62 +550,38 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0"
             }
             
-            # Get all invites for this plan
-            url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{mighty_plan_id}/invites"
-            print(f"[REVOKE] Request URL: {url}")
-            print(f"[REVOKE] NETWORK_ID: {NETWORK_ID}")
-            print(f"[REVOKE] API Token present: {bool(MIGHTY_NETWORKS_API)}")
+            # Step 1: Get member ID by email
+            member_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/members/by_email?email={recipient_email}"
+            print(f"[REVOKE] Getting member ID from: {member_url}")
             
-            mighty_invite_id = None
-            page = 1
+            member_response = await client.get(member_url, headers=headers)
+            print(f"[REVOKE] Member lookup status: {member_response.status_code}")
             
-            # Paginate through all invites until we find the matching email
-            while url:
-                print(f"[REVOKE] Fetching page {page}...")
-                response = await client.get(url, headers=headers)
-                
-                print(f"[REVOKE] Response status: {response.status_code}")
-                
-                if response.status_code != 200:
-                    print(f"[REVOKE] Failed to fetch invites from Mighty Networks: {response.status_code}")
-                    print(f"[REVOKE] Response body: {response.text}")
-                    raise HTTPException(status_code=500, detail="Failed to fetch invites from Mighty Networks")
-                
-                invites_data = response.json()
-                mighty_invites = invites_data.get("items", [])
-                
-                print(f"[REVOKE] Found {len(mighty_invites)} invites on page {page}")
-                print(f"[REVOKE] Searching for exact match: '{recipient_email}'")
-                
-                # Search for the invite matching this email
-                for idx, mn_invite in enumerate(mighty_invites):
-                    invite_email = mn_invite.get("recipient_email")
-                    print(f"[REVOKE] Page {page}, Invite {idx+1}: email='{invite_email}', id={mn_invite.get('id')}")
-                    
-                    if invite_email == recipient_email:
-                        mighty_invite_id = mn_invite.get("id")
-                        print(f"[REVOKE] ✓ Found Mighty Networks invite_id: {mighty_invite_id} for email: {recipient_email}")
-                        break
-                
-                # If found, stop pagination
-                if mighty_invite_id:
-                    break
-                
-                # Check if there's a next page
-                links = invites_data.get("links", {})
-                next_url = links.get("next")
-                
-                if next_url:
-                    # Construct full URL from relative path
-                    url = f"https://api.mn.co{next_url}"
-                    page += 1
-                    print(f"[REVOKE] Moving to next page: {url}")
-                else:
-                    print(f"[REVOKE] No more pages to check")
-                    url = None
+            if member_response.status_code != 200:
+                print(f"[REVOKE] Member not found or error: {member_response.text}")
+                raise HTTPException(status_code=404, detail="Member not found in Mighty Networks")
+            
+            member_data = member_response.json()
+            member_id = member_data.get("id")
+            print(f"[REVOKE] Found member_id: {member_id} for email: {recipient_email}")
+            
+            # Step 2: Get invite by member ID
+            invite_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/plans/{mighty_plan_id}/invites/{member_id}"
+            print(f"[REVOKE] Getting invite from: {invite_url}")
+            
+            invite_response = await client.get(invite_url, headers=headers)
+            print(f"[REVOKE] Invite lookup status: {invite_response.status_code}")
+            
+            if invite_response.status_code != 200:
+                print(f"[REVOKE] Invite not found or error: {invite_response.text}")
+                raise HTTPException(status_code=404, detail="Invite not found in Mighty Networks")
+            
+            invite_data = invite_response.json()
+            mighty_invite_id = invite_data.get("id")
+            print(f"[REVOKE] Found invite_id: {mighty_invite_id}")
             
             if not mighty_invite_id:
-                print(f"[REVOKE] No Mighty Networks invite found for email: {recipient_email}")
+                print(f"[REVOKE] No invite ID in response")
                 raise HTTPException(status_code=404, detail="Invite not found in Mighty Networks")
             
             # Revoke the invite via Mighty Networks API
@@ -632,8 +608,14 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
         "status": "success",
         "message": "Invite revoked successfully"
     }
-
-
+if not mighty_invite_id:
+                print(f"[REVOKE] No invite ID in response")
+                raise HTTPException(status_code=404, detail="Invite not found in Mighty Networks")
+            
+            # Step 3: Revoke the invite via Mighty Networks API
+            revoke_url = f"https://api.mn.co/admin/v1/networks/{NETWORK_ID}/invites/{mighty_invite_id}"
+            print(f"[REVOKE] Revoking invite at: {revoke_url}")
+            
 @app.get("/users/{user_id}/invites")
 async def get_user_invites(user_id: int, current_user: dict = Depends(get_current_user)):
     """Get all invites sent by a user."""
