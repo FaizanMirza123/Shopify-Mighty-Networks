@@ -546,7 +546,8 @@ async def revoke_invite(user_id: int, invite_id: int, current_user: dict = Depen
         async with httpx.AsyncClient() as client:
             headers = {
                 "Authorization": f"Bearer {MIGHTY_NETWORKS_API}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0"
             }
             
             # Get all invites for this plan
