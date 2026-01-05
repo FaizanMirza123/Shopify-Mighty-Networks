@@ -223,6 +223,78 @@ async def shopify_order_paid_webhook(request: Request):
     }
 
 
+# ============== MIGHTY NETWORKS WEBHOOK ==============
+
+@app.post("/mighty")
+async def mighty_networks_webhook(request: Request):
+    """
+    Webhook endpoint for Mighty Networks events.
+    Handles MemberBadgeAdded and MemberBadgeRemoved events.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    
+    event_type = payload.get("event")
+    
+    # Only handle badge events
+    if event_type not in ["MemberBadgeAdded", "MemberBadgeRemoved"]:
+        return {"status": "skipped", "reason": f"Event type {event_type} not handled"}
+    
+    # Extract member and badge information
+    data = payload.get("data", {})
+    member = data.get("member", {})
+    badge = data.get("badge", {})
+    
+    member_email = member.get("email")
+    badge_name = badge.get("name")
+    
+    # Validate required fields
+    if not member_email:
+        return {"status": "skipped", "reason": "No member email found"}
+    
+    if not badge_name:
+        return {"status": "skipped", "reason": "No badge name found"}
+    
+    # Check if badge is one of the Parelli Program badges
+    parelli_badges = [
+        "Level 1 Parelli Program",
+        "Level 2 Parelli Program",
+        "Level 3 Parelli Program",
+        "Level 4 Parelli Program"
+    ]
+    
+    if badge_name not in parelli_badges:
+        return {"status": "skipped", "reason": f"Badge {badge_name} is not a tracked Parelli Program badge"}
+    
+    # Find the invite by recipient email
+    invite = db.get_invite_by_email(member_email)
+    
+    if not invite:
+        return {"status": "skipped", "reason": f"No invite found for email {member_email}"}
+    
+    # Update invite status based on event type
+    if event_type == "MemberBadgeAdded":
+        db.update_invite_status(invite["id"], "joined")
+        return {
+            "status": "success",
+            "message": f"Invite status updated to 'joined' for {member_email}",
+            "invite_id": invite["id"],
+            "badge_name": badge_name
+        }
+    elif event_type == "MemberBadgeRemoved":
+        db.update_invite_status(invite["id"], "removed")
+        return {
+            "status": "success",
+            "message": f"Invite status updated to 'removed' for {member_email}",
+            "invite_id": invite["id"],
+            "badge_name": badge_name
+        }
+    
+    return {"status": "skipped", "reason": "Unknown event processing result"}
+
+
 # ============== AUTH ENDPOINTS ==============
 
 @app.post("/auth/login")

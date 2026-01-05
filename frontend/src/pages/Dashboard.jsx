@@ -370,7 +370,11 @@ const Dashboard = () => {
                           className={cn(
                             "px-2 inline-flex text-xs leading-5 font-semibold rounded-full",
                             invite.status === "sent"
+                              ? "bg-blue-100 text-blue-800"
+                              : invite.status === "joined"
                               ? "bg-green-100 text-green-800"
+                              : invite.status === "removed"
+                              ? "bg-red-100 text-red-800"
                               : "bg-gray-100 text-gray-800"
                           )}
                         >

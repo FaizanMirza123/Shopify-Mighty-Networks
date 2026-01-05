@@ -263,5 +263,33 @@ def revoke_invite(invite_id):
     conn.close()
 
 
+def update_invite_status(invite_id, status):
+    """Update the status of an invite."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE invites 
+        SET status = ?, updated_at = ?
+        WHERE id = ?
+    """, (status, datetime.utcnow().isoformat(), invite_id))
+    conn.commit()
+    conn.close()
+
+
+def get_invite_by_email(recipient_email):
+    """Get the most recent invite by recipient email."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM invites 
+        WHERE recipient_email = ? 
+        ORDER BY created_at DESC 
+        LIMIT 1
+    """, (recipient_email,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 # Initialize database on import
 init_db()
