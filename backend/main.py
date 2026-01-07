@@ -179,7 +179,7 @@ async def shopify_order_paid_webhook(request: Request):
                 sku=item["sku"],
                 plan_id=item["plan_id"],
                 plan_title=item["title"],
-                quantity=item["quantity"],
+                quantity=item["quantity"]*5,
                 shopify_order_id=order_id
             )
         return {
