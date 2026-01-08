@@ -38,6 +38,12 @@ SKU_MAPPING_PATH = os.path.join(os.path.dirname(__file__), "sku_mapping.json")
 with open(SKU_MAPPING_PATH, "r") as f:
     SKU_TO_PLAN_MAPPING = json.load(f)
 
+# Plan ID to Plan Name mapping
+PLAN_ID_TO_NAME = {
+    243479: "Level 1 Program",
+    242949: "Level 1 & 2 Program"
+}
+
 # Badge to Plan ID mapping for Parelli Programs
 BADGE_TO_PLAN_ID = {
     "Level 1 Parelli Program": "243479",
@@ -157,11 +163,14 @@ async def shopify_order_paid_webhook(request: Request):
     for item in line_items:
         sku = item.get("sku", "")
         if sku in SKU_TO_PLAN_MAPPING:
+            plan_id = SKU_TO_PLAN_MAPPING[sku]
+            # Get plan name from mapping, default to title if not found
+            plan_name = PLAN_ID_TO_NAME.get(plan_id, item.get("title", ""))
             matched_items.append({
                 "sku": sku,
-                "plan_id": SKU_TO_PLAN_MAPPING[sku],
-                "title": item.get("title", ""),
-                "quantity": item.get("quantity", 1)
+                "plan_id": plan_id,
+                "title": plan_name,
+                "quantity": item.get("quantity", 1) * 5  # Multiply quantity by 5
             })
     
     if not matched_items:
@@ -179,7 +188,7 @@ async def shopify_order_paid_webhook(request: Request):
                 sku=item["sku"],
                 plan_id=item["plan_id"],
                 plan_title=item["title"],
-                quantity=item["quantity"]*5,
+                quantity=item["quantity"],
                 shopify_order_id=order_id
             )
         return {
