@@ -191,7 +191,9 @@ const Dashboard = () => {
                       <h3 className="font-bold text-lg">
                         {plan.plan_title || `Plan ${plan.plan_id}`}
                       </h3>
-                    
+                        <p className="text-gray-500 text-sm mb-4">
+                        SKU: {plan.sku}
+                         </p>
                       <div className="flex justify-between items-end">
                         <div>
                           <span className="text-3xl font-bold text-primary">

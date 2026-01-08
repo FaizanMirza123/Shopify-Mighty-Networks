@@ -432,29 +432,47 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request, current
     """
     Send an invite to a person for a specific plan via Mighty Networks API.
     """
+    print(f"\n{'='*60}")
+    print(f"[SEND_INVITE] Started - user_id: {user_id}, user_plan_id: {user_plan_id}")
+    print(f"[SEND_INVITE] Current user: {current_user.get('email')} (ID: {current_user.get('id')})")
+    print(f"{'='*60}\n")
+    
     # Verify user can only send invites for their own plans
     if current_user["id"] != user_id:
+        print(f"[SEND_INVITE] Access denied - user mismatch")
         raise HTTPException(status_code=403, detail="Access denied")
     
     try:
         body = await request.json()
-    except Exception:
+        print(f"[SEND_INVITE] Request body: {json.dumps(body, indent=2)}")
+    except Exception as e:
+        print(f"[SEND_INVITE] Failed to parse JSON: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON")
     
     recipient_email = body.get("email")
     recipient_first_name = body.get("first_name", "")
     recipient_last_name = body.get("last_name", "")
     
+    print(f"[SEND_INVITE] Recipient: {recipient_email} ({recipient_first_name} {recipient_last_name})")
+    
     if not recipient_email:
+        print(f"[SEND_INVITE] Error: Recipient email is required")
         raise HTTPException(status_code=400, detail="Recipient email is required")
     # Verify plan exists and belongs to user
+    print(f"[SEND_INVITE] Fetching user plan with ID: {user_plan_id}")
     user_plan = db.get_user_plan_by_id(user_plan_id)
     if not user_plan or user_plan["user_id"] != user_id:
+        print(f"[SEND_INVITE] Error: Plan not found or doesn't belong to user")
         raise HTTPException(status_code=404, detail="Plan not found")
+    
+    print(f"[SEND_INVITE] Plan found: {user_plan['plan_title']} (ID: {user_plan['plan_id']})")
+    print(f"[SEND_INVITE] Total quantity: {user_plan['total_quantity']}, Used: {user_plan['used_quantity']}")
     
     # Check available quantity
     available = user_plan["total_quantity"] - user_plan["used_quantity"]
+    print(f"[SEND_INVITE] Available invites: {available}")
     if available <= 0:
+        print(f"[SEND_INVITE] Error: No available invites for this plan")
         raise HTTPException(status_code=400, detail="No available invites for this plan")
     
     # Send to Zapier webhook to handle invite creation
@@ -465,15 +483,23 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request, current
         "plan_name": user_plan["plan_title"]
     }
     
+    print(f"[SEND_INVITE] Sending to Zapier webhook: {ZAPIER_INVITE_WEBHOOK_URL}")
+    print(f"[SEND_INVITE] Zapier payload: {json.dumps(zapier_invite_payload, indent=2)}")
+    
     try:
         async with httpx.AsyncClient() as client:
             zapier_response = await client.post(ZAPIER_INVITE_WEBHOOK_URL, json=zapier_invite_payload)
+            print(f"[SEND_INVITE] Zapier response status: {zapier_response.status_code}")
+            print(f"[SEND_INVITE] Zapier response body: {zapier_response.text}")
             if zapier_response.status_code not in [200, 201]:
+                print(f"[SEND_INVITE] Error: Failed to send invite via Zapier")
                 raise HTTPException(status_code=500, detail="Failed to send invite via Zapier")
     except httpx.RequestError as e:
+        print(f"[SEND_INVITE] Error: Failed to connect to Zapier: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to connect to Zapier: {str(e)}")
     
     # Store invite in database
+    print(f"[SEND_INVITE] Creating invite in database")
     invite_id = db.create_invite(
         user_plan_id=user_plan_id,
         user_id=user_id,
@@ -483,11 +509,14 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request, current
         recipient_last_name=recipient_last_name,
         mighty_user_id=None
     )
+    print(f"[SEND_INVITE] Invite created in database with ID: {invite_id}")
     
     # Increment used quantity
+    print(f"[SEND_INVITE] Incrementing used quantity for plan {user_plan_id}")
     db.increment_used_quantity(user_plan_id)
+    print(f"[SEND_INVITE] Used quantity incremented")
     
-    return {
+    response_data = {
         "status": "success",
         "invite": {
             "id": invite_id,
@@ -498,6 +527,11 @@ async def send_invite(user_id: int, user_plan_id: int, request: Request, current
             "created_at": datetime.utcnow().isoformat() + "Z"
         }
     }
+    
+    print(f"[SEND_INVITE] Success! Response: {json.dumps(response_data, indent=2)}")
+    print(f"{'='*60}\n")
+    
+    return response_data
 
 
 @app.delete("/users/{user_id}/invites/{invite_id}")
