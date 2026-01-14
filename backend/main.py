@@ -85,18 +85,18 @@ async def send_email(to_email: str, name: str, password: str):
 <html>
 <head>
 <style>
-body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-.container { max-width: 600px; margin: 0 auto; background-color: rgb(251, 195, 95); padding: 20px; border-radius: 8px; }
-.logo-section { text-align: center; margin-bottom: 20px; }
-.logo-section img { max-width: 50%; height: auto; border-radius: 8px; }
-.header { background-color: rgb(251, 195, 95); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-.content { background-color: white; padding: 30px; border-radius: 0 0 8px 8px; }
-.section { margin-bottom: 20px; }
-.section h2 { color: rgb(251, 195, 95); font-size: 18px; margin-bottom: 10px; }
-.credentials { background-color: #f0f0f0; padding: 15px; border-left: 4px solid rgb(251, 195, 95); border-radius: 4px; margin: 15px 0; }
-.credentials p { margin: 8px 0; font-size: 14px; }
-.cta-button { background-color: rgb(251, 195, 95); color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: bold; }
-.footer { color: #666; font-size: 12px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; text-align: center; }
+body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+.container {{ max-width: 600px; margin: 0 auto; background-color: rgb(251, 195, 95); padding: 20px; border-radius: 8px; }}
+.logo-section {{ text-align: center; margin-bottom: 20px; }}
+.logo-section img {{ max-width: 50%; height: auto; border-radius: 8px; }}
+.header {{ background-color: rgb(251, 195, 95); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+.content {{ background-color: white; padding: 30px; border-radius: 0 0 8px 8px; }}
+.section {{ margin-bottom: 20px; }}
+.section h2 {{ color: rgb(251, 195, 95); font-size: 18px; margin-bottom: 10px; }}
+.credentials {{ background-color: #f0f0f0; padding: 15px; border-left: 4px solid rgb(251, 195, 95); border-radius: 4px; margin: 15px 0; }}
+.credentials p {{ margin: 8px 0; font-size: 14px; }}
+.cta-button {{ background-color: rgb(251, 195, 95); color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: bold; }}
+.footer {{ color: #666; font-size: 12px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; text-align: center; }}
 </style>
 </head>
 <body>
