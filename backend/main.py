@@ -3,6 +3,10 @@ import json
 import string
 import secrets
 import httpx
+import smtplib
+import asyncio
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
@@ -11,6 +15,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 import jwt
 from passlib.context import CryptContext
+from cryptography.fernet import Fernet
+import base64
+import hashlib
 
 import database as db
 
@@ -21,8 +28,19 @@ MIGHTY_NETWORKS_API = os.getenv("MIGHTY_NETWORKS_API")
 NETWORK_ID = os.getenv("NETWORK_ID")
 SHOPIFY_X_ACCESS_TOKEN = os.getenv("SHOPIFY_X_ACCESS_TOKEN")
 SHOPIFY_STORE_NAME = os.getenv("SHOPIFY_STORE_NAME")
-ZAPIER_WEBHOOK_URL = os.getenv("ZAPIER_WEBHOOK_URL")
 ZAPIER_INVITE_WEBHOOK_URL = os.getenv("ZAPIER_INVITE_WEBHOOK_URL")
+
+# Email Configuration
+MAIL_MAILER = os.getenv("MAIL_MAILER")
+MAIL_HOST = os.getenv("MAIL_HOST")
+MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
+MAIL_USERNAME = os.getenv("MAIL_USERNAME")
+MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
+MAIL_ENCRYPTION = os.getenv("MAIL_ENCRYPTION")
+MAIL_FROM_ADDRESS = os.getenv("MAIL_FROM_ADDRESS")
+MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "")
+QUEUE_CONNECTION = os.getenv("QUEUE_CONNECTION")
+SECRET = os.getenv("SECRET", "")
 
 # JWT and Security Configuration
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "TEST")
@@ -32,6 +50,138 @@ JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
+
+# Encryption setup
+def get_encryption_key():
+    """Generate a Fernet key from the SECRET environment variable."""
+    if not SECRET:
+        raise ValueError("SECRET environment variable not set")
+    # Use SHA256 to create a 32-byte key from the secret
+    key = hashlib.sha256(SECRET.encode()).digest()
+    return base64.urlsafe_b64encode(key)
+
+cipher = Fernet(get_encryption_key()) if SECRET else None
+
+def encrypt_password(password: str) -> str:
+    """Encrypt a password using Fernet encryption."""
+    if not cipher:
+        return password  # Fallback to plain text if no SECRET
+    encrypted = cipher.encrypt(password.encode())
+    return encrypted.decode()
+
+def decrypt_password(encrypted_password: str) -> str:
+    """Decrypt a password using Fernet encryption."""
+    if not cipher:
+        return encrypted_password  # Fallback if no SECRET
+    try:
+        decrypted = cipher.decrypt(encrypted_password.encode())
+        return decrypted.decode()
+    except Exception:
+        return encrypted_password  # Return as-is if decryption fails
+
+async def send_email(to_email: str, name: str, password: str):
+    """Send welcome email with account credentials."""
+    html_template = """<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+.container { max-width: 600px; margin: 0 auto; background-color: rgb(251, 195, 95); padding: 20px; border-radius: 8px; }
+.logo-section { text-align: center; margin-bottom: 20px; }
+.logo-section img { max-width: 50%; height: auto; border-radius: 8px; }
+.header { background-color: rgb(251, 195, 95); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+.content { background-color: white; padding: 30px; border-radius: 0 0 8px 8px; }
+.section { margin-bottom: 20px; }
+.section h2 { color: rgb(251, 195, 95); font-size: 18px; margin-bottom: 10px; }
+.credentials { background-color: #f0f0f0; padding: 15px; border-left: 4px solid rgb(251, 195, 95); border-radius: 4px; margin: 15px 0; }
+.credentials p { margin: 8px 0; font-size: 14px; }
+.cta-button { background-color: rgb(251, 195, 95); color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: bold; }
+.footer { color: #666; font-size: 12px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="logo-section">
+<img src="https://shopus.parelli.com/cdn/shop/files/Untitled_design-6_6667ea54-ba7e-43a6-8246-0a59ae10c111.png?v=1618580221&width=360" alt="Parelli Logo">
+</div>
+<div class="header">
+<h1>Welcome to Parelli!</h1>
+</div>
+<div class="content">
+<p>Hi {name},</p>
+
+<div class="section">
+<h2>Your Account is Ready</h2>
+<p>Your account has been successfully created! You can now access the Parelli workflow platform with your credentials.
+<br>
+This is a one time email, so we recommend that you save your login details.
+<br>
+When you click on "Sign Into your Account" we also recommend bookmarking your dashboard URL for future ease of access</p>
+</div>
+
+<div class="section">
+<h2>Sign In Information</h2>
+<div class="credentials">
+<p><strong>Email:</strong> {email}</p>
+<p><strong>Password:</strong> {password}</p>
+</div>
+<p>Please keep these credentials secure and do not share them with anyone.</p>
+</div>
+
+<div class="section">
+<a href="https://workflow.parelli.com" class="cta-button" style="color:white;">Sign In to Your Account</a>
+</div>
+
+<div class="section">
+<h2>Need Help?</h2>
+<p>If you have any questions or need assistance getting started, please don't hesitate to reach out to our support team. We're here to help! 
+<br>
+Please contact Jeri on support@parelli.com</p>
+</div>
+
+<div class="footer">
+<p>Best regards,<br><strong>Parelli Management</strong></p>
+<p>© 2024 Parelli. All rights reserved.</p>
+</div>
+</div>
+</body>
+</html>"""
+    
+    html_content = html_template.format(name=name, email=to_email, password=password)
+    
+    def send_smtp():
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = 'Welcome to Parelli - Your Account Credentials'
+            msg['From'] = f"{MAIL_FROM_NAME} <{MAIL_FROM_ADDRESS}>" if MAIL_FROM_NAME else MAIL_FROM_ADDRESS
+            msg['To'] = to_email
+            
+            html_part = MIMEText(html_content, 'html')
+            msg.attach(html_part)
+            
+            if MAIL_ENCRYPTION == "tls":
+                with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                    server.starttls()
+                    if MAIL_USERNAME and MAIL_PASSWORD:
+                        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                    server.send_message(msg)
+            elif MAIL_ENCRYPTION == "ssl":
+                with smtplib.SMTP_SSL(MAIL_HOST, MAIL_PORT) as server:
+                    if MAIL_USERNAME and MAIL_PASSWORD:
+                        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                    if MAIL_USERNAME and MAIL_PASSWORD:
+                        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                    server.send_message(msg)
+            
+            print(f"[EMAIL] Successfully sent email to {to_email}")
+        except Exception as e:
+            print(f"[EMAIL] Failed to send email to {to_email}: {e}")
+    
+    # Run in thread to avoid blocking
+    await asyncio.to_thread(send_smtp)
 
 # Load SKU mapping
 SKU_MAPPING_PATH = os.path.join(os.path.dirname(__file__), "sku_mapping.json")
@@ -191,6 +341,15 @@ async def shopify_order_paid_webhook(request: Request):
                 quantity=item["quantity"],
                 shopify_order_id=order_id
             )
+        
+        # Decrypt existing user's password and send email
+        try:
+            decrypted_password = decrypt_password(existing_user["password"])
+            user_name = first_name or existing_user.get("first_name") or email.split("@")[0]
+            await send_email(email, user_name, decrypted_password)
+        except Exception as e:
+            print(f"Failed to send email to existing user: {e}")
+        
         return {
             "status": "success",
             "message": "Plans added to existing user",
@@ -200,9 +359,11 @@ async def shopify_order_paid_webhook(request: Request):
     
     # Create new user with random password
     password = generate_password(10)
+    encrypted_password = encrypt_password(password)
+    
     user_id = db.create_user(
         email=email,
-        password=password,
+        password=encrypted_password,
         first_name=first_name,
         last_name=last_name,
         phone=phone
@@ -219,18 +380,12 @@ async def shopify_order_paid_webhook(request: Request):
             shopify_order_id=order_id
         )
     
-    # Send to Zapier webhook
-    zapier_payload = {
-        "email": email,
-        "name": first_name or email.split("@")[0],
-        "password": password
-    }
-    
+    # Send welcome email with credentials
     try:
-        async with httpx.AsyncClient() as client:
-            await client.post(ZAPIER_WEBHOOK_URL, json=zapier_payload)
+        user_name = first_name or email.split("@")[0]
+        await send_email(email, user_name, password)
     except Exception as e:
-        print(f"Failed to send to Zapier: {e}")
+        print(f"Failed to send welcome email: {e}")
     
     return {
         "status": "success",
@@ -366,15 +521,24 @@ async def login(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    # Verify password (support both hashed and plain text for backwards compatibility)
+    # Verify password (support encrypted, hashed, and plain text for backwards compatibility)
     password_valid = False
-    if user["password"].startswith("$2b$"):  # bcrypt hash
-        password_valid = verify_password(password, user["password"])
-    else:  # plain text (legacy)
-        password_valid = (user["password"] == password)
-        # If valid, update to hashed password
-        if password_valid:
-            db.update_user_password(user["id"], hash_password(password))
+    stored_password = user["password"]
+    
+    if stored_password.startswith("$2b$"):  # bcrypt hash
+        password_valid = verify_password(password, stored_password)
+    else:
+        # Try to decrypt first (encrypted password)
+        try:
+            decrypted = decrypt_password(stored_password)
+            password_valid = (decrypted == password)
+        except Exception:
+            # Fall back to plain text comparison
+            password_valid = (stored_password == password)
+        
+        # If valid, update to encrypted password
+        if password_valid and stored_password != encrypt_password(password):
+            db.update_user_password(user["id"], encrypt_password(password))
     
     if not password_valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
