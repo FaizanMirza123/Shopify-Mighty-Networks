@@ -79,24 +79,43 @@ def decrypt_password(encrypted_password: str) -> str:
     except Exception:
         return encrypted_password  # Return as-is if decryption fails
 
-async def send_email(to_email: str, name: str, password: str):
-    """Send welcome email with account credentials."""
-    html_template = """<!DOCTYPE html>
+async def send_email(to_email: str, name: str, password: str, is_new_account: bool = True):
+    """Send email with account credentials."""
+    if is_new_account:
+        account_message = """<div class="section">
+<h2>Your Account is Ready</h2>
+<p>Your account has been successfully created! You can now access the Parelli workflow platform with your credentials.
+<br>
+This is a one time email, so we recommend that you save your login details.
+<br>
+When you click on "Sign Into your Account" we also recommend bookmarking your dashboard URL for future ease of access</p>
+</div>"""
+        header_title = "Welcome to Parelli!"
+    else:
+        account_message = """<div class="section">
+<h2>Thank You for Your Purchase</h2>
+<p>Thank you for your recent purchase! Here are your login credentials for accessing the Parelli workflow platform.
+<br>
+We recommend that you save your login details for easy access.</p>
+</div>"""
+        header_title = "Your Parelli Account Details"
+    
+    html_template = f"""<!DOCTYPE html>
 <html>
 <head>
 <style>
-body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-.container {{ max-width: 600px; margin: 0 auto; background-color: rgb(251, 195, 95); padding: 20px; border-radius: 8px; }}
-.logo-section {{ text-align: center; margin-bottom: 20px; }}
-.logo-section img {{ max-width: 50%; height: auto; border-radius: 8px; }}
-.header {{ background-color: rgb(251, 195, 95); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
-.content {{ background-color: white; padding: 30px; border-radius: 0 0 8px 8px; }}
-.section {{ margin-bottom: 20px; }}
-.section h2 {{ color: rgb(251, 195, 95); font-size: 18px; margin-bottom: 10px; }}
-.credentials {{ background-color: #f0f0f0; padding: 15px; border-left: 4px solid rgb(251, 195, 95); border-radius: 4px; margin: 15px 0; }}
-.credentials p {{ margin: 8px 0; font-size: 14px; }}
-.cta-button {{ background-color: rgb(251, 195, 95); color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: bold; }}
-.footer {{ color: #666; font-size: 12px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; text-align: center; }}
+body {{{{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}}}
+.container {{{{ max-width: 600px; margin: 0 auto; background-color: rgb(251, 195, 95); padding: 20px; border-radius: 8px; }}}}
+.logo-section {{{{ text-align: center; margin-bottom: 20px; }}}}
+.logo-section img {{{{ max-width: 50%; height: auto; border-radius: 8px; }}}}
+.header {{{{ background-color: rgb(251, 195, 95); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}}}
+.content {{{{ background-color: white; padding: 30px; border-radius: 0 0 8px 8px; }}}}
+.section {{{{ margin-bottom: 20px; }}}}
+.section h2 {{{{ color: rgb(251, 195, 95); font-size: 18px; margin-bottom: 10px; }}}}
+.credentials {{{{ background-color: #f0f0f0; padding: 15px; border-left: 4px solid rgb(251, 195, 95); border-radius: 4px; margin: 15px 0; }}}}
+.credentials p {{{{ margin: 8px 0; font-size: 14px; }}}}
+.cta-button {{{{ background-color: rgb(251, 195, 95); color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: bold; }}}}
+.footer {{{{ color: #666; font-size: 12px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; text-align: center; }}}}
 </style>
 </head>
 <body>
@@ -105,25 +124,18 @@ body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
 <img src="https://shopus.parelli.com/cdn/shop/files/Untitled_design-6_6667ea54-ba7e-43a6-8246-0a59ae10c111.png?v=1618580221&width=360" alt="Parelli Logo">
 </div>
 <div class="header">
-<h1>Welcome to Parelli!</h1>
+<h1>{header_title}</h1>
 </div>
 <div class="content">
-<p>Hi {name},</p>
+<p>Hi {{{{name}}}},</p>
 
-<div class="section">
-<h2>Your Account is Ready</h2>
-<p>Your account has been successfully created! You can now access the Parelli workflow platform with your credentials.
-<br>
-This is a one time email, so we recommend that you save your login details.
-<br>
-When you click on "Sign Into your Account" we also recommend bookmarking your dashboard URL for future ease of access</p>
-</div>
+{account_message}
 
 <div class="section">
 <h2>Sign In Information</h2>
 <div class="credentials">
-<p><strong>Email:</strong> {email}</p>
-<p><strong>Password:</strong> {password}</p>
+<p><strong>Email:</strong> {{{{email}}}}</p>
+<p><strong>Password:</strong> {{{{password}}}}</p>
 </div>
 <p>Please keep these credentials secure and do not share them with anyone.</p>
 </div>
@@ -347,7 +359,7 @@ async def shopify_order_paid_webhook(request: Request):
         try:
             decrypted_password = decrypt_password(existing_user["password"])
             user_name = first_name or existing_user.get("first_name") or email.split("@")[0]
-            await send_email(email, user_name, decrypted_password)
+            await send_email(email, user_name, decrypted_password, is_new_account=False)
         except Exception as e:
             print(f"Failed to send email to existing user: {e}")
         
@@ -384,7 +396,7 @@ async def shopify_order_paid_webhook(request: Request):
     # Send welcome email with credentials
     try:
         user_name = first_name or email.split("@")[0]
-        await send_email(email, user_name, password)
+        await send_email(email, user_name, password, is_new_account=True)
     except Exception as e:
         print(f"Failed to send welcome email: {e}")
     
