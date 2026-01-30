@@ -161,10 +161,13 @@ Please contact Jeri on support@parelli.com</p>
     
     html_content = html_template.format(name=name, email=to_email, password=password)
     
+    # Set subject line based on account type
+    subject = 'Welcome to Parelli - Your Account Credentials' if is_new_account else 'Your Parelli Account Details'
+    
     def send_smtp():
         try:
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = 'Welcome to Parelli - Your Account Credentials'
+            msg['Subject'] = subject
             msg['From'] = f"{MAIL_FROM_NAME} <{MAIL_FROM_ADDRESS}>" if MAIL_FROM_NAME else MAIL_FROM_ADDRESS
             msg['To'] = to_email
             
