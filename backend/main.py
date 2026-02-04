@@ -184,6 +184,109 @@ Please contact Jeri on support@parelli.com</p>
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, send_smtp)
 
+async def send_existing_user_email(to_email: str, name: str, password: str):
+    """Send email to existing user with account credentials."""
+    html_template = """<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+.container {{ max-width: 600px; margin: 0 auto; background-color: rgb(251, 195, 95); padding: 20px; border-radius: 8px; }}
+.logo-section {{ text-align: center; margin-bottom: 20px; }}
+.logo-section img {{ max-width: 50%; height: auto; border-radius: 8px; }}
+.header {{ background-color: rgb(251, 195, 95); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+.content {{ background-color: white; padding: 30px; border-radius: 0 0 8px 8px; }}
+.section {{ margin-bottom: 20px; }}
+.section h2 {{ color: rgb(251, 195, 95); font-size: 18px; margin-bottom: 10px; }}
+.credentials {{ background-color: #f0f0f0; padding: 15px; border-left: 4px solid rgb(251, 195, 95); border-radius: 4px; margin: 15px 0; }}
+.credentials p {{ margin: 8px 0; font-size: 14px; }}
+.cta-button {{ background-color: rgb(251, 195, 95); color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: bold; }}
+.footer {{ color: #666; font-size: 12px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; text-align: center; }}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="logo-section">
+<img src="https://shopus.parelli.com/cdn/shop/files/Untitled_design-6_6667ea54-ba7e-43a6-8246-0a59ae10c111.png?v=1618580221&width=360" alt="Parelli Logo">
+</div>
+<div class="header">
+<h1>Thank You for Your Purchase!</h1>
+</div>
+<div class="content">
+<p>Hi {name},</p>
+
+<div class="section">
+<h2>Your Account Details</h2>
+<p>Thanks for your purchase. We have updated your account with your new plans.
+<br>
+You can access the Parelli workflow platform with your credentials below.</p>
+</div>
+
+<div class="section">
+<h2>Sign In Information</h2>
+<div class="credentials">
+<p><strong>Email:</strong> {email}</p>
+<p><strong>Password:</strong> {password}</p>
+</div>
+<p>Please keep these credentials secure and do not share them with anyone.</p>
+</div>
+
+<div class="section">
+<a href="https://workflow.parelli.com" class="cta-button" style="color:white;">Sign In to Your Account</a>
+</div>
+
+<div class="section">
+<h2>Need Help?</h2>
+<p>If you have any questions or need assistance, please don't hesitate to reach out to our support team.
+<br>
+Please contact Jeri on support@parelli.com</p>
+</div>
+
+<div class="footer">
+<p>Best regards,<br><strong>Parelli Management</strong></p>
+<p>© 2024 Parelli. All rights reserved.</p>
+</div>
+</div>
+</body>
+</html>"""
+    
+    html_content = html_template.format(name=name, email=to_email, password=password)
+    
+    def send_smtp():
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = 'Thank You for Your Purchase - Parelli Account Details'
+            msg['From'] = f"{MAIL_FROM_NAME} <{MAIL_FROM_ADDRESS}>" if MAIL_FROM_NAME else MAIL_FROM_ADDRESS
+            msg['To'] = to_email
+            
+            html_part = MIMEText(html_content, 'html')
+            msg.attach(html_part)
+            
+            if MAIL_ENCRYPTION == "tls":
+                with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                    server.starttls()
+                    if MAIL_USERNAME and MAIL_PASSWORD:
+                        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                    server.send_message(msg)
+            elif MAIL_ENCRYPTION == "ssl":
+                with smtplib.SMTP_SSL(MAIL_HOST, MAIL_PORT) as server:
+                    if MAIL_USERNAME and MAIL_PASSWORD:
+                        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                    if MAIL_USERNAME and MAIL_PASSWORD:
+                        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                    server.send_message(msg)
+            
+            print(f"[EMAIL] Successfully sent existing user email to {to_email}")
+        except Exception as e:
+            print(f"[EMAIL] Failed to send existing user email to {to_email}: {e}")
+    
+    # Run in thread to avoid blocking
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, send_smtp)
+
 # Load SKU mapping
 SKU_MAPPING_PATH = os.path.join(os.path.dirname(__file__), "sku_mapping.json")
 with open(SKU_MAPPING_PATH, "r") as f:
@@ -347,7 +450,7 @@ async def shopify_order_paid_webhook(request: Request):
         try:
             decrypted_password = decrypt_password(existing_user["password"])
             user_name = first_name or existing_user.get("first_name") or email.split("@")[0]
-            await send_email(email, user_name, decrypted_password)
+            await send_existing_user_email(email, user_name, decrypted_password)
         except Exception as e:
             print(f"Failed to send email to existing user: {e}")
         
