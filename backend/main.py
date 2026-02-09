@@ -292,6 +292,55 @@ SKU_MAPPING_PATH = os.path.join(os.path.dirname(__file__), "sku_mapping.json")
 with open(SKU_MAPPING_PATH, "r") as f:
     SKU_TO_PLAN_MAPPING = json.load(f)
 
+# Clean up old SKU mappings on startup
+try:
+    valid_skus = list(SKU_TO_PLAN_MAPPING.keys())
+    deleted_count = db.cleanup_unmapped_skus(valid_skus)
+    if deleted_count > 0:
+        print(f"[STARTUP] Cleaned up {deleted_count} user plans with unmapped SKUs")
+except Exception as e:
+    print(f"[STARTUP] Error cleaning up unmapped SKUs: {e}")
+
+def reload_sku_mapping():
+    """Reload SKU mapping from file and cleanup old mappings."""
+    global SKU_TO_PLAN_MAPPING
+    try:
+        with open(SKU_MAPPING_PATH, "r") as f:
+            new_mapping = json.load(f)
+        
+        # Only update if the mapping has changed
+        if new_mapping != SKU_TO_PLAN_MAPPING:
+            old_skus = set(SKU_TO_PLAN_MAPPING.keys())
+            new_skus = set(new_mapping.keys())
+            removed_skus = old_skus - new_skus
+            added_skus = new_skus - old_skus
+            
+            SKU_TO_PLAN_MAPPING = new_mapping
+            
+            # Clean up user plans with removed SKUs
+            valid_skus = list(new_mapping.keys())
+            deleted_count = db.cleanup_unmapped_skus(valid_skus)
+            
+            print(f"[SKU MAPPING] Reloaded mapping")
+            if removed_skus:
+                print(f"[SKU MAPPING] Removed SKUs: {removed_skus}")
+            if added_skus:
+                print(f"[SKU MAPPING] Added SKUs: {added_skus}")
+            if deleted_count > 0:
+                print(f"[SKU MAPPING] Cleaned up {deleted_count} user plans with removed SKUs")
+            
+            return {
+                "status": "success",
+                "removed_skus": list(removed_skus),
+                "added_skus": list(added_skus),
+                "plans_cleaned": deleted_count
+            }
+        else:
+            return {"status": "no_changes", "message": "SKU mapping unchanged"}
+    except Exception as e:
+        print(f"[SKU MAPPING] Error reloading: {e}")
+        return {"status": "error", "message": str(e)}
+
 # Plan ID to Plan Name mapping
 PLAN_ID_TO_NAME = {
     243479: "Level 1 Program",
@@ -392,11 +441,37 @@ async def shopify_order_paid_webhook(request: Request):
     """
     Webhook endpoint for Shopify Order Paid events.
     Filters by SKUs defined in sku_mapping.json and creates users with plans.
+    Only processes orders that are paid and contain "Levels Program" line items.
     """
+    # Reload SKU mapping to ensure latest mappings and cleanup old ones
+    reload_sku_mapping()
+    
     try:
         payload = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    
+    # Check if order is paid
+    financial_status = payload.get("financial_status", "")
+    if financial_status != "paid":
+        return {"status": "skipped", "reason": f"Order not paid (status: {financial_status})"}
+    
+    # Check if line_items exist
+    line_items = payload.get("line_items")
+    if not line_items or not isinstance(line_items, list) or len(line_items) == 0:
+        return {"status": "skipped", "reason": "No line_items found in order"}
+    
+    # Check if any line item has name or title equal to "Levels Program"
+    has_levels_program = False
+    for item in line_items:
+        item_name = item.get("name", "")
+        item_title = item.get("title", "")
+        if item_name == "Levels Program" or item_title == "Levels Program":
+            has_levels_program = True
+            break
+    
+    if not has_levels_program:
+        return {"status": "skipped", "reason": "No 'Levels Program' found in line items"}
     
     # Extract customer info
     customer = payload.get("customer", {})
@@ -411,7 +486,6 @@ async def shopify_order_paid_webhook(request: Request):
     order_id = str(payload.get("id", ""))
     
     # Filter line items by tracked SKUs
-    line_items = payload.get("line_items", [])
     matched_items = []
     
     for item in line_items:
@@ -926,6 +1000,18 @@ async def get_user_invites(user_id: int, current_user: dict = Depends(get_curren
             for inv in invites
         ]
     }
+
+
+# ============== SKU MAPPING ADMIN ENDPOINTS ==============
+
+@app.post("/admin/reload-sku-mapping")
+async def admin_reload_sku_mapping(current_user: dict = Depends(get_current_user)):
+    """
+    Reload SKU mapping from file and cleanup old mappings.
+    Protected endpoint requiring authentication.
+    """
+    result = reload_sku_mapping()
+    return result
 
 
 # ============== HEALTH CHECK ==============

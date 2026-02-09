@@ -307,5 +307,38 @@ def get_invite_by_email_and_plan(recipient_email, plan_id):
     return dict(row) if row else None
 
 
+def cleanup_unmapped_skus(valid_skus):
+    """
+    Delete user plans with SKUs that are no longer in the sku_mapping.
+    
+    Args:
+        valid_skus: List of SKUs that are currently valid/mapped
+    
+    Returns:
+        Number of user plans deleted
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if not valid_skus:
+        conn.close()
+        return 0
+    
+    # Create placeholders for SQL query
+    placeholders = ','.join('?' * len(valid_skus))
+    
+    # Delete user plans with SKUs not in the valid list
+    cursor.execute(f"""
+        DELETE FROM user_plans 
+        WHERE sku NOT IN ({placeholders})
+    """, valid_skus)
+    
+    deleted_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    return deleted_count
+
+
 # Initialize database on import
 init_db()
