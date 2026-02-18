@@ -441,7 +441,7 @@ async def shopify_order_paid_webhook(request: Request):
     """
     Webhook endpoint for Shopify Order Paid events.
     Filters by SKUs defined in sku_mapping.json and creates users with plans.
-    Only processes orders that are paid and contain "Levels Program" line items.
+    Only processes orders that are paid and contain "Professionals Levels Bundle" line items.
     """
     # Reload SKU mapping to ensure latest mappings and cleanup old ones
     reload_sku_mapping()
@@ -466,12 +466,12 @@ async def shopify_order_paid_webhook(request: Request):
     for item in line_items:
         item_name = item.get("name", "")
         item_title = item.get("title", "")
-        if item_name == "Levels Program" or item_title == "Levels Program":
+        if item_name == "Professionals Levels Bundle" or item_title == "Professionals Levels Bundle":
             has_levels_program = True
             break
     
     if not has_levels_program:
-        return {"status": "skipped", "reason": "No 'Levels Program' found in line items"}
+        return {"status": "skipped", "reason": "No 'Professionals Levels Bundle' found in line items"}
     
     # Extract customer info
     customer = payload.get("customer", {})
