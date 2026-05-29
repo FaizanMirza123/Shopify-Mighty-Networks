@@ -739,6 +739,150 @@ async def login(request: Request):
     }
 
 
+@app.post("/auth/forgot-password")
+async def forgot_password(request: Request):
+    """Send a password reset email if the account exists."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    email = body.get("email", "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    user = db.get_user_by_email(email)
+
+    # Always return success to avoid user enumeration
+    if not user:
+        return {"status": "success", "message": "If that email is registered you will receive a reset link shortly."}
+
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+    db.create_password_reset_token(user["id"], token, expires_at)
+
+    reset_link = f"https://workflow.parelli.com/reset-password?token={token}"
+    user_name = user.get("first_name") or email.split("@")[0]
+
+    html_template = """<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+.container {{ max-width: 600px; margin: 0 auto; background-color: rgb(251, 195, 95); padding: 20px; border-radius: 8px; }}
+.logo-section {{ text-align: center; margin-bottom: 20px; }}
+.logo-section img {{ max-width: 50%; height: auto; border-radius: 8px; }}
+.header {{ background-color: rgb(251, 195, 95); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+.content {{ background-color: white; padding: 30px; border-radius: 0 0 8px 8px; }}
+.section {{ margin-bottom: 20px; }}
+.section h2 {{ color: rgb(251, 195, 95); font-size: 18px; margin-bottom: 10px; }}
+.cta-button {{ background-color: rgb(251, 195, 95); color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: bold; }}
+.footer {{ color: #666; font-size: 12px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; text-align: center; }}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="logo-section">
+<img src="https://shopus.parelli.com/cdn/shop/files/Untitled_design-6_6667ea54-ba7e-43a6-8246-0a59ae10c111.png?v=1618580221&width=360" alt="Parelli Logo">
+</div>
+<div class="header">
+<h1>Password Reset</h1>
+</div>
+<div class="content">
+<p>Hi {name},</p>
+<div class="section">
+<h2>Reset Your Password</h2>
+<p>We received a request to reset your password. Click the button below to choose a new one. This link expires in 1 hour.</p>
+</div>
+<div class="section">
+<a href="{reset_link}" class="cta-button" style="color:white;">Reset Password</a>
+</div>
+<div class="section">
+<p>If you did not request a password reset, you can safely ignore this email — your password will not change.</p>
+</div>
+<div class="section">
+<h2>Need Help?</h2>
+<p>Please contact Jeri on support@parelli.com</p>
+</div>
+<div class="footer">
+<p>Best regards,<br><strong>Parelli Management</strong></p>
+<p>© 2024 Parelli. All rights reserved.</p>
+</div>
+</div>
+</div>
+</body>
+</html>"""
+
+    html_content = html_template.format(name=user_name, reset_link=reset_link)
+
+    def send_smtp():
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = 'Parelli - Password Reset Request'
+            msg['From'] = f"{MAIL_FROM_NAME} <{MAIL_FROM_ADDRESS}>" if MAIL_FROM_NAME else MAIL_FROM_ADDRESS
+            msg['To'] = email
+            msg.attach(MIMEText(html_content, 'html'))
+            if MAIL_ENCRYPTION == "tls":
+                with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                    server.starttls()
+                    if MAIL_USERNAME and MAIL_PASSWORD:
+                        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                    server.send_message(msg)
+            elif MAIL_ENCRYPTION == "ssl":
+                with smtplib.SMTP_SSL(MAIL_HOST, MAIL_PORT) as server:
+                    if MAIL_USERNAME and MAIL_PASSWORD:
+                        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(MAIL_HOST, MAIL_PORT) as server:
+                    if MAIL_USERNAME and MAIL_PASSWORD:
+                        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                    server.send_message(msg)
+            print(f"[EMAIL] Sent password reset email to {email}")
+        except Exception as e:
+            print(f"[EMAIL] Failed to send password reset email to {email}: {e}")
+
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, send_smtp)
+
+    return {"status": "success", "message": "If that email is registered you will receive a reset link shortly."}
+
+
+@app.post("/auth/reset-password")
+async def reset_password(request: Request):
+    """Reset a user's password using a valid reset token."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    token = body.get("token", "").strip()
+    new_password = body.get("password", "")
+
+    if not token or not new_password:
+        raise HTTPException(status_code=400, detail="Token and password are required")
+
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    record = db.get_password_reset_token(token)
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+
+    if record["used"]:
+        raise HTTPException(status_code=400, detail="This reset link has already been used")
+
+    expires_at = datetime.fromisoformat(record["expires_at"])
+    if datetime.utcnow() > expires_at:
+        raise HTTPException(status_code=400, detail="This reset link has expired")
+
+    encrypted_password = encrypt_password(new_password)
+    db.update_user_password(record["user_id"], encrypted_password)
+    db.mark_password_reset_token_used(token)
+
+    return {"status": "success", "message": "Password updated successfully"}
+
+
 # ============== USER PLANS ENDPOINTS ==============
 
 @app.get("/users/{user_id}/plans")

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { motion } from "framer-motion";
 import { LogIn } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { api } from "../services/api";
 
 const Login = () => {
@@ -92,6 +92,15 @@ const Login = () => {
                 </span>
               )}
             </div>
+          </div>
+
+          <div className="text-right">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-gray-600 hover:text-gray-900 underline"
+            >
+              Forgot your password?
+            </Link>
           </div>
 
           {error && (

@@ -46,6 +46,19 @@ def init_db():
         )
     """)
     
+    # Password reset tokens table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            expires_at TEXT NOT NULL,
+            used INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
     # Invites table - stores invites sent via Mighty Networks
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS invites (
@@ -117,6 +130,37 @@ def update_user_password(user_id, hashed_password):
         SET password = ?, updated_at = ?
         WHERE id = ?
     """, (hashed_password, datetime.utcnow().isoformat(), user_id))
+    conn.commit()
+    conn.close()
+
+
+# Password reset token functions
+def create_password_reset_token(user_id, token, expires_at):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO password_reset_tokens (user_id, token, expires_at)
+        VALUES (?, ?, ?)
+    """, (user_id, token, expires_at))
+    conn.commit()
+    conn.close()
+
+
+def get_password_reset_token(token):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM password_reset_tokens WHERE token = ?", (token,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def mark_password_reset_token_used(token):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE password_reset_tokens SET used = 1 WHERE token = ?
+    """, (token,))
     conn.commit()
     conn.close()
 
