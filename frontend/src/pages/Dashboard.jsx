@@ -10,7 +10,6 @@ import {
   LogOut,
   Loader2,
 } from "lucide-react";
-import useEmblaCarousel from "embla-carousel-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
@@ -25,7 +24,6 @@ const Dashboard = () => {
   const [plans, setPlans] = useState([]);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [invites, setInvites] = useState([]);
-  const [emblaRef] = useEmblaCarousel({ loop: false, align: "start" });
   const { register, handleSubmit, reset } = useForm();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -166,53 +164,51 @@ const Dashboard = () => {
               No plans available. Purchase a plan to get started.
             </div>
           ) : (
-            <div className="overflow-hidden" ref={emblaRef}>
-              <div className="flex gap-4">
-                {plans.map((plan) => (
-                  <div
-                    key={plan.id}
-                    className="flex-[0_0_100%] sm:flex-[0_0_50%] md:flex-[0_0_33%] min-w-0 cursor-pointer"
-                    onClick={() => setSelectedPlan(plan)}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {plans.map((plan) => (
+                <div
+                  key={plan.id}
+                  className="min-w-0 cursor-pointer"
+                  onClick={() => setSelectedPlan(plan)}
+                >
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    className={cn(
+                      "p-6 rounded-xl shadow-sm border h-full relative overflow-hidden transition-all duration-200",
+                      selectedPlan.id === plan.id
+                        ? "bg-yellow-50 border-primary ring-2 ring-primary ring-offset-2"
+                        : "bg-white border-gray-100 opacity-80 hover:opacity-100"
+                    )}
                   >
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      className={cn(
-                        "p-6 rounded-xl shadow-sm border h-full relative overflow-hidden transition-all duration-200",
-                        selectedPlan.id === plan.id
-                          ? "bg-yellow-50 border-primary ring-2 ring-primary ring-offset-2"
-                          : "bg-white border-gray-100 opacity-80 hover:opacity-100"
-                      )}
-                    >
-                      {selectedPlan.id === plan.id && (
-                        <div className="absolute top-0 right-0 bg-primary text-xs font-bold px-3 py-1 rounded-bl-lg shadow-sm">
-                          SELECTED
-                        </div>
-                      )}
-                      <h3 className="font-bold text-lg">
-                        {plan.plan_title || `Plan ${plan.plan_id}`}
-                      </h3>
-                        <p className="text-gray-500 text-sm mb-4">
-                        SKU: {plan.sku}
-                         </p>
-                      <div className="flex justify-between items-end">
-                        <div>
-                          <span className="text-3xl font-bold text-primary">
-                            {plan.available_quantity}
-                          </span>
-                          <span className="text-gray-400 text-sm ml-1">
-                            available
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="block text-sm text-gray-500">
-                            Total: {plan.total_quantity}
-                          </span>
-                        </div>
+                    {selectedPlan.id === plan.id && (
+                      <div className="absolute top-0 right-0 bg-primary text-xs font-bold px-3 py-1 rounded-bl-lg shadow-sm">
+                        SELECTED
                       </div>
-                    </motion.div>
-                  </div>
-                ))}
-              </div>
+                    )}
+                    <h3 className="font-bold text-lg">
+                      {plan.plan_title || `Plan ${plan.plan_id}`}
+                    </h3>
+                    <p className="text-gray-500 text-sm mb-4">
+                      SKU: {plan.sku}
+                    </p>
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <span className="text-3xl font-bold text-primary">
+                          {plan.available_quantity}
+                        </span>
+                        <span className="text-gray-400 text-sm ml-1">
+                          available
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="block text-sm text-gray-500">
+                          Total: {plan.total_quantity}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              ))}
             </div>
           )}
         </section>
