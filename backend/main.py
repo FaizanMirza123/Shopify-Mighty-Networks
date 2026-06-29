@@ -20,7 +20,6 @@ import base64
 import hashlib
 
 import database as db
-from admin import router as admin_router
 
 # Load environment variables from base directory
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -404,7 +403,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount the god-mode admin dashboard + API (isolated module, additive only)
+# Mount the god-mode admin dashboard + API (isolated module, additive only).
+# Imported here (after load_dotenv) so admin.py reads real .env secrets.
+from admin import router as admin_router
 app.include_router(admin_router)
 
 

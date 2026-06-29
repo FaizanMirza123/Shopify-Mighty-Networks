@@ -156,6 +156,31 @@ async def admin_list_users(admin: dict = Depends(get_current_admin)):
     return {"status": "success", "count": len(result), "users": result}
 
 
+@router.get("/users/{user_id}/password")
+async def admin_reveal_password(user_id: int, admin: dict = Depends(get_current_admin)):
+    """Reveal a single customer's password (decrypted). God-mode only, on demand."""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    stored = user.get("password") or ""
+    # bcrypt-hashed passwords are one-way and cannot be recovered
+    if isinstance(stored, str) and stored.startswith("$2b$"):
+        return {"user_id": user_id, "email": user["email"], "recoverable": False,
+                "password": None, "note": "Password is bcrypt-hashed; cannot be recovered."}
+
+    # Decrypt with main's correctly-initialized Fernet cipher.
+    # Lazy import avoids a circular import at module load time.
+    try:
+        from main import decrypt_password
+        pw = decrypt_password(stored)
+    except Exception as e:
+        return {"user_id": user_id, "email": user["email"], "recoverable": False,
+                "password": None, "note": f"Could not decrypt: {e}"}
+
+    return {"user_id": user_id, "email": user["email"], "recoverable": True, "password": pw}
+
+
 @router.get("/webhook-logs")
 async def admin_webhook_logs(
     admin: dict = Depends(get_current_admin),
@@ -366,11 +391,12 @@ async function usersView() {
   const d = await api("/users");
   if (!d.users.length) return `<div class="card empty">No customers yet.</div>`;
   return `<div class="card"><div class="count">${d.count} customer(s)</div><table>
-    <thead><tr><th>ID</th><th>Customer</th><th>Email</th><th>Plans (used / total)</th><th>Invites</th><th>Joined</th></tr></thead>
+    <thead><tr><th>ID</th><th>Customer</th><th>Email</th><th>Password</th><th>Plans (used / total)</th><th>Invites</th><th>Joined</th></tr></thead>
     <tbody>${d.users.map(u=>`<tr>
       <td>${u.id}</td>
       <td>${esc((u.first_name||"")+" "+(u.last_name||""))||"—"}</td>
       <td>${esc(u.email)}</td>
+      <td id="pw-${u.id}"><button class="ghost" onclick="revealPw(${u.id})">reveal</button></td>
       <td>${u.plans.length? u.plans.map(p=>`<div>${esc(p.plan_title||p.plan_id)} <span class="muted">(${p.used_quantity}/${p.total_quantity}, ${p.available_quantity} left)</span></div>`).join(""):'<span class="muted">—</span>'}</td>
       <td>${u.invites.length? u.invites.map(i=>`<div>${esc(i.recipient_email)} ${pill(i.status)}</div>`).join(""):'<span class="muted">0</span>'}</td>
       <td class="muted">${fmt(u.created_at)}</td>
@@ -447,6 +473,28 @@ function bindInvite() {
     } catch(e){ document.getElementById("i_err").textContent=e.message; }
     finally { btn.disabled=false; }
   };
+}
+
+// ---------- reveal password ----------
+async function revealPw(id) {
+  const cell = document.getElementById("pw-"+id);
+  if (!cell) return;
+  cell.innerHTML = '<span class="muted">…</span>';
+  try {
+    const d = await api("/users/"+id+"/password");
+    if (d.recoverable === false) {
+      cell.innerHTML = '<span class="muted" title="'+esc(d.note||"")+'">not recoverable</span>'
+        + ' <button class="ghost" onclick="revealPw('+id+')">retry</button>';
+    } else {
+      cell.innerHTML = '<code>'+esc(d.password)+'</code> <button class="ghost" onclick="hidePw('+id+')">hide</button>';
+    }
+  } catch(e) {
+    cell.innerHTML = '<span class="err">'+esc(e.message)+'</span> <button class="ghost" onclick="revealPw('+id+')">retry</button>';
+  }
+}
+function hidePw(id) {
+  const c = document.getElementById("pw-"+id);
+  if (c) c.innerHTML = '<button class="ghost" onclick="revealPw('+id+')">reveal</button>';
 }
 
 // ---------- render ----------
