@@ -37,8 +37,20 @@ export const api = {
       },
       body: JSON.stringify({ email, password }),
     });
-    
-    return handleResponse(response);
+
+    // A 401 on login means wrong email/password — show it inline.
+    // Do NOT route through handleResponse(), which treats 401 as an expired
+    // session: that wipes storage and hard-reloads /login (the "page reset"),
+    // hiding the real reason the sign-in failed.
+    if (response.status === 401) {
+      throw new Error('Invalid email or password. Please try again.');
+    }
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Login failed' }));
+      throw new Error(error.detail || 'Login failed. Please try again.');
+    }
+
+    return response.json();
   },
 
   forgotPassword: async (email) => {
