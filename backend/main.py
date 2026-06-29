@@ -20,6 +20,7 @@ import base64
 import hashlib
 
 import database as db
+from admin import router as admin_router
 
 # Load environment variables from base directory
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -78,6 +79,37 @@ def decrypt_password(encrypted_password: str) -> str:
         return decrypted.decode()
     except Exception:
         return encrypted_password  # Return as-is if decryption fails
+
+# ============== ADMIN / AUDIT LOGGING HELPERS ==============
+# These wrappers never raise: logging must never interfere with the live flow.
+
+def log_filtered_webhook(source: str, status: str, reason: str, payload=None):
+    """Record a webhook that was filtered out (or processed) for the admin dashboard."""
+    try:
+        order_id = None
+        email = None
+        if isinstance(payload, dict):
+            order_id = str(payload.get("id", "")) or None
+            email = payload.get("email") or (payload.get("customer") or {}).get("email")
+        db.log_webhook_event(
+            source=source,
+            status=status,
+            reason=reason,
+            order_id=order_id,
+            email=email,
+            payload=json.dumps(payload, default=str) if payload is not None else None,
+        )
+    except Exception as e:
+        print(f"[WEBHOOK LOG] Failed to record event: {e}")
+
+
+def log_credential_email(recipient: str, email_type: str, status: str, user_id=None, detail=None):
+    """Record where account credentials / reset links were delivered."""
+    try:
+        db.log_email_event(recipient, email_type, status, user_id=user_id, detail=detail)
+    except Exception as e:
+        print(f"[EMAIL LOG] Failed to record event: {e}")
+
 
 async def send_email(to_email: str, name: str, password: str):
     """Send welcome email with account credentials."""
@@ -177,8 +209,10 @@ Please contact Jeri on support@parelli.com</p>
                     server.send_message(msg)
             
             print(f"[EMAIL] Successfully sent email to {to_email}")
+            log_credential_email(to_email, "welcome_credentials", "sent")
         except Exception as e:
             print(f"[EMAIL] Failed to send email to {to_email}: {e}")
+            log_credential_email(to_email, "welcome_credentials", "failed", detail=str(e))
     
     # Run in thread to avoid blocking (Python 3.7+ compatible)
     loop = asyncio.get_event_loop()
@@ -280,8 +314,10 @@ Please contact Jeri on support@parelli.com</p>
                     server.send_message(msg)
             
             print(f"[EMAIL] Successfully sent existing user email to {to_email}")
+            log_credential_email(to_email, "existing_credentials", "sent")
         except Exception as e:
             print(f"[EMAIL] Failed to send existing user email to {to_email}: {e}")
+            log_credential_email(to_email, "existing_credentials", "failed", detail=str(e))
     
     # Run in thread to avoid blocking
     loop = asyncio.get_event_loop()
@@ -368,6 +404,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount the god-mode admin dashboard + API (isolated module, additive only)
+app.include_router(admin_router)
+
+
+def seed_admin_from_env():
+    """Create the god-mode admin from ADMIN_EMAIL / ADMIN_PASSWORD env vars if absent.
+
+    In production, set these in your deployment env. For local/manual setup use
+    `python create_admin.py <email> <password>`.
+    """
+    try:
+        admin_email = os.getenv("ADMIN_EMAIL")
+        admin_password = os.getenv("ADMIN_PASSWORD")
+        if admin_email and admin_password and not db.get_admin_by_email(admin_email):
+            db.create_admin(admin_email, pwd_context.hash(admin_password))
+            print(f"[ADMIN] Seeded god-mode admin: {admin_email}")
+    except Exception as e:
+        print(f"[ADMIN] Failed to seed admin: {e}")
+
+
+seed_admin_from_env()
+
 
 def generate_password(length=10):
     """Generate a random alphanumeric password."""
@@ -449,16 +507,19 @@ async def shopify_order_paid_webhook(request: Request):
     try:
         payload = await request.json()
     except Exception:
+        log_filtered_webhook("shopify", "skipped", "Invalid JSON payload", None)
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
-    
+
     # Check if order is paid
     financial_status = payload.get("financial_status", "")
     if financial_status != "paid":
+        log_filtered_webhook("shopify", "skipped", f"Order not paid (status: {financial_status})", payload)
         return {"status": "skipped", "reason": f"Order not paid (status: {financial_status})"}
     
     # Check if line_items exist
     line_items = payload.get("line_items")
     if not line_items or not isinstance(line_items, list) or len(line_items) == 0:
+        log_filtered_webhook("shopify", "skipped", "No line_items found in order", payload)
         return {"status": "skipped", "reason": "No line_items found in order"}
     
     # Check if any line item has name or title equal to "Levels Program"
@@ -471,6 +532,7 @@ async def shopify_order_paid_webhook(request: Request):
             break
     
     if not has_levels_program:
+        log_filtered_webhook("shopify", "skipped", "No 'Professionals Levels Bundle' found in line items", payload)
         return {"status": "skipped", "reason": "No 'Professionals Levels Bundle' found in line items"}
     
     # Extract customer info
@@ -478,6 +540,7 @@ async def shopify_order_paid_webhook(request: Request):
     email = payload.get("email") or customer.get("email")
     
     if not email:
+        log_filtered_webhook("shopify", "skipped", "No email found in order", payload)
         return {"status": "skipped", "reason": "No email found in order"}
     
     first_name = customer.get("first_name", "")
@@ -502,6 +565,7 @@ async def shopify_order_paid_webhook(request: Request):
             })
     
     if not matched_items:
+        log_filtered_webhook("shopify", "skipped", "No tracked SKUs found in order", payload)
         return {"status": "skipped", "reason": "No tracked SKUs found in order"}
     
     # Check if user exists
@@ -528,6 +592,11 @@ async def shopify_order_paid_webhook(request: Request):
         except Exception as e:
             print(f"Failed to send email to existing user: {e}")
         
+        log_filtered_webhook(
+            "shopify", "processed",
+            f"Plans added to existing user (user_id={user_id}, plans={len(matched_items)})",
+            payload,
+        )
         return {
             "status": "success",
             "message": "Plans added to existing user",
@@ -565,6 +634,11 @@ async def shopify_order_paid_webhook(request: Request):
     except Exception as e:
         print(f"Failed to send welcome email: {e}")
     
+    log_filtered_webhook(
+        "shopify", "processed",
+        f"New user created with plans (user_id={user_id}, plans={len(matched_items)})",
+        payload,
+    )
     return {
         "status": "success",
         "message": "New user created with plans",
@@ -839,8 +913,10 @@ body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
                         server.login(MAIL_USERNAME, MAIL_PASSWORD)
                     server.send_message(msg)
             print(f"[EMAIL] Sent password reset email to {email}")
+            log_credential_email(email, "password_reset", "sent")
         except Exception as e:
             print(f"[EMAIL] Failed to send password reset email to {email}: {e}")
+            log_credential_email(email, "password_reset", "failed", detail=str(e))
 
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, send_smtp)

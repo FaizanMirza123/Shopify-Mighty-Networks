@@ -77,7 +77,45 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
-    
+
+    # Admin users table - separate from customer `users`, used for the god-mode dashboard
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS admins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Webhook logs - records every Shopify/Mighty webhook that was processed OR filtered out
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS webhook_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT,
+            status TEXT,
+            reason TEXT,
+            order_id TEXT,
+            email TEXT,
+            payload TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Email logs - records where account credentials / invites / resets were delivered
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS email_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipient TEXT,
+            email_type TEXT,
+            status TEXT,
+            user_id INTEGER,
+            detail TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -380,8 +418,142 @@ def cleanup_unmapped_skus(valid_skus):
     deleted_count = cursor.rowcount
     conn.commit()
     conn.close()
-    
+
     return deleted_count
+
+
+# ==================== ADMIN (god-mode dashboard) ====================
+def create_admin(email, password_hash):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO admins (email, password_hash) VALUES (?, ?)",
+            (email.strip().lower(), password_hash),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        cursor.execute("SELECT id FROM admins WHERE email = ?", (email.strip().lower(),))
+        row = cursor.fetchone()
+        return row["id"] if row else None
+    finally:
+        conn.close()
+
+
+def update_admin_password(email, password_hash):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE admins SET password_hash = ?, updated_at = ? WHERE email = ?",
+        (password_hash, datetime.utcnow().isoformat(), email.strip().lower()),
+    )
+    conn.commit()
+    updated = cursor.rowcount
+    conn.close()
+    return updated
+
+
+def get_admin_by_email(email):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM admins WHERE email = ?", (email.strip().lower(),))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_admin_by_id(admin_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM admins WHERE id = ?", (admin_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def count_admins():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) AS c FROM admins")
+    row = cursor.fetchone()
+    conn.close()
+    return row["c"] if row else 0
+
+
+def get_all_users():
+    """Return every customer (without password material) for the admin dashboard."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, email, first_name, last_name, phone, created_at
+        FROM users ORDER BY created_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+# ==================== WEBHOOK LOGS ====================
+def log_webhook_event(source, status, reason, order_id=None, email=None, payload=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO webhook_logs (source, status, reason, order_id, email, payload)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (source, status, reason, order_id, email, payload))
+    conn.commit()
+    conn.close()
+
+
+def get_webhook_logs(limit=200, status=None, source=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT * FROM webhook_logs"
+    clauses = []
+    params = []
+    if status:
+        clauses.append("status = ?")
+        params.append(status)
+    if source:
+        clauses.append("source = ?")
+        params.append(source)
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+# ==================== EMAIL / CREDENTIAL LOGS ====================
+def log_email_event(recipient, email_type, status, user_id=None, detail=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO email_logs (recipient, email_type, status, user_id, detail)
+        VALUES (?, ?, ?, ?, ?)
+    """, (recipient, email_type, status, user_id, detail))
+    conn.commit()
+    conn.close()
+
+
+def get_email_logs(limit=200, email_type=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT * FROM email_logs"
+    params = []
+    if email_type:
+        query += " WHERE email_type = ?"
+        params.append(email_type)
+    query += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
 # Initialize database on import
